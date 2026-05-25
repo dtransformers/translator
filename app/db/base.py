@@ -5,3 +5,6 @@ class Base(DeclarativeBase):
     Base class for all SQLAlchemy declarative models.
     """
     pass
+
+# Import all models here so Alembic/create_all can discover them
+from app.brands.models import Brand

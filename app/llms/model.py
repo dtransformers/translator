@@ -4,12 +4,7 @@ from langchain_community.chat_models import ChatOllama
 from app.core.config import settings
 
 def get_llm() -> BaseChatModel:
-    """
-    Factory function to initialize and return the selected LangChain chat model.
-    Reads provider configuration from the environment settings.
-    """
     provider = settings.LLM_PROVIDER.lower()
-    
     if provider == "gemini":
         if not settings.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY must be set in environment when using gemini provider.")
@@ -26,6 +21,5 @@ def get_llm() -> BaseChatModel:
             model=settings.LLM_MODEL_NAME,
             temperature=0.3
         )
-        
     else:
         raise ValueError(f"Unsupported LLM_PROVIDER: {provider}. Please choose 'gemini' or 'ollama'.")

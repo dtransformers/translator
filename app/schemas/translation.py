@@ -12,6 +12,7 @@ class TranslationRequest(BaseModel):
     text: str = Field(..., description="The text to translate", min_length=1)
     source_lang: str = Field(..., description="The source language code (e.g., 'en', 'fr')", min_length=2, max_length=10)
     target_lang: str = Field(..., description="The target language code (e.g., 'es', 'ar')", min_length=2, max_length=10)
+    brand_uuid: Optional[str] = Field(None, description="Optional Brand UUID to inject context into the LLM prompt")
 
     model_config = {
         "json_schema_extra": {
@@ -83,6 +84,7 @@ class DocumentTranslationRequest(BaseModel):
     document_url: str = Field(..., description="The URL of the document file to translate")
     source_lang: str = Field(..., description="The source language code")
     target_lang: str = Field(..., description="The target language code")
+    brand_uuid: Optional[str] = Field(None, description="Optional Brand UUID to inject context into the LLM prompt")
 
     model_config = {
         "json_schema_extra": {

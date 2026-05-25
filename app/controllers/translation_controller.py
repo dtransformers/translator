@@ -12,6 +12,7 @@ from app.pipeline.cache import get_translation_cache
 from app.pipeline.complexity import calculate_complexity_score
 from app.pipeline.translation import translate
 from app.pipeline.quality import score_translation
+from app.brands.service import get_brand_context
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +21,18 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
     source_lang = payload.get("source_lang")
     target_lang = payload.get("target_lang")
     text = payload.get("text")
+    brand_uuid = payload.get("brand_uuid")
 
     if not source_lang or not target_lang or not text:
         return {"error": "Missing source_lang, target_lang, or text in payload"}
 
+    # Establish the brand context for LLMs via the service module
+    brand_context = await get_brand_context(db, brand_uuid)
+
+
     start_time = time.time()
     repo = TranslationRepository(db)
 
-    # ── Step 1: IsTheInputTranslizable ──
     if not is_translatable(text):
         translation_time = time.time() - start_time
         await repo.create_translation(
