@@ -12,4 +12,7 @@ emoji
 nltk
 textstat
 greenlet
+langchain
+langchain-google-genai
+langchain-community
 sacremoses

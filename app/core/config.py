@@ -13,6 +13,12 @@ class Settings(BaseSettings):
 
     IS_DYNAMIC_LOADING: bool = True
 
+    # LLM Settings
+    LLM_PROVIDER: str = "gemini" # gemini or ollama
+    GEMINI_API_KEY: str | None = None
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    LLM_MODEL_NAME: str = "gemini-1.5-flash"
+
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
