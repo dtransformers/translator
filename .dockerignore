@@ -1,0 +1,26 @@
+# Virtual environments
+.env
+.venv/
+env/
+venv/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS generated files
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/

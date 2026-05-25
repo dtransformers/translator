@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: translator_api
+    depends_on:
+      - db
+    ports:
+      # Maps host port 8000 to container port 8000
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override the host to 0.0.0.0 so it is accessible from outside the container
+      - HOST=0.0.0.0
+      - PORT=8000
+    volumes:
+      # Mount the current directory into /code for hot-reloading
+      - .:/code
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: translator_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-translator}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-translator123}
+      POSTGRES_DB: ${POSTGRES_DB:-translations_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
