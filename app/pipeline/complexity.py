@@ -16,7 +16,6 @@ def _ensure_nltk_data():
     except LookupError:
         nltk.download("punkt_tab", quiet=True)
     except zipfile.BadZipFile:
-        # Handle the case where the download was interrupted previously
         logger.warning("Corrupt NLTK data found. Removing and re-downloading...")
         nltk_data_dir = os.path.expanduser("~/nltk_data/tokenizers")
         if os.path.exists(nltk_data_dir):

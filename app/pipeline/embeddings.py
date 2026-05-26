@@ -26,6 +26,5 @@ def get_embedding(text: str) -> List[float]:
         return [0.0] * 384
         
     model = get_embedding_model()
-    # encode returns a numpy array, we need a standard python list of floats for pgvector
     embedding = model.encode(text)
     return embedding.tolist()

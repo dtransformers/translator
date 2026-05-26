@@ -1,6 +1,13 @@
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.chat_models import ChatOllama
+try:
+    from langchain_community.chat_models import ChatOllama
+except ImportError:
+    try:
+        from langchain_ollama import ChatOllama
+    except ImportError:
+        # Fallback to the specific module if it's there
+        from langchain_community.chat_models.ollama import ChatOllama
 from app.core.config import settings
 
 def get_llm() -> BaseChatModel:

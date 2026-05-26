@@ -22,3 +22,4 @@ httpx
 pytest-mock
 pgvector
 sentence-transformers
+langchain-ollama

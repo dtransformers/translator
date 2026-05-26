@@ -22,15 +22,10 @@ async def init_db():
     logger = logging.getLogger(__name__)
 
     try:
-        # Ping the database to ensure connection is valid
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
             logger.info("Database connection established successfully.")
-
-            # Create pgvector extension
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-
-            # Create tables
             await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables verified/created.")
     except Exception as e:

@@ -8,3 +8,6 @@ class Base(DeclarativeBase):
 
 # Import all models here so Alembic/create_all can discover them
 from app.brands.models import Brand
+
+# Import all models here so Alembic/create_all can discover them
+from app.brands.models import Brand

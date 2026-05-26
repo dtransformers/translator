@@ -7,8 +7,9 @@ from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-DUCKLING_URL = "http://translator_duckling:8000/parse"
+from app.core.config import settings
 
+DUCKLING_URL = settings.DUCKLING_URL
 def canonicalize_text(text: str) -> str:
     """
     Trims, lowercases, unicode normalizes, collapses spaces, and removes punctuation noise.

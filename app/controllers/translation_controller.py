@@ -8,7 +8,7 @@ from app.pipeline.verification import (
     is_source_target_compatible,
     is_in_supported_languages,
 )
-from app.pipeline.cache import get_translation_cache
+from app.pipeline.cache import get_translation_cache, save_translation_cache
 from app.pipeline.complexity import calculate_complexity_score
 from app.pipeline.translation import translate
 from app.pipeline.quality import score_translation
@@ -26,7 +26,6 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
     if not source_lang or not target_lang or not text:
         return {"error": "Missing source_lang, target_lang, or text in payload"}
 
-    # Establish the brand context for LLMs via the service module
     brand_context = await get_brand_context(db, brand_uuid)
 
 
@@ -45,15 +44,12 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
         )
         return {"translation": text, "skipped": True, "reason": "not_translatable"}
 
-    # ── Step 2: IsTheInputSourceTargetCompatible ──
     compat = is_source_target_compatible(text, source_lang)
     detected_input_lang = compat["detected_lang"]
 
-    # ── Step 3: IsTheInputInSupportedLanguages ──
     if not is_in_supported_languages(source_lang, target_lang):
         return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-    # ── Step 4: IsTheInputHasTranslationCache ──
     cached = await get_translation_cache(text, source_lang, target_lang, db)
     if cached:
         return {
@@ -63,16 +59,13 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
             "db_id": cached.id,
         }
 
-    # ── Step 5: IsTheInputTransibleUsingMT (complexity) ──
     complexity_score = calculate_complexity_score(text)
 
-    # ── Translation Step ──
     try:
         translation_text = translate(text, source_lang, target_lang, complexity_score)
         is_successed = True
         notes = None
     except NotImplementedError as e:
-        # Complex text — not ready yet
         translation_time = time.time() - start_time
         await repo.create_translation(
             value=text, language=source_lang,
@@ -90,7 +83,6 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
 
     translation_time_elapsed = time.time() - start_time
 
-    # ── Return Step: COMETKiwi quality scoring ──
     comet_score = None
     if is_successed and translation_text:
         try:
@@ -99,8 +91,8 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
             logger.warning(f"COMETKiwi scoring failed: {e}")
             comet_score = None
 
-    # ── Save to database ──
-    new_record = await repo.create_translation(
+    new_record = await save_translation_cache(
+        repo=repo,
         value=text,
         language=source_lang,
         translation=translation_text,
