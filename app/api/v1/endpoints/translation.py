@@ -4,7 +4,7 @@ Translation API endpoints (v1).
 Provides text translation, language detection, and document translation.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -48,10 +48,12 @@ router = APIRouter(dependencies=[Depends(require_auth)])
 )
 async def translate(
     payload: TranslationRequest,
+    uuid: str | None = Query(None, description="Optional Brand UUID to inject context"),
+    name: str | None = Query(None, description="Optional Domain name to apply rules"),
     db: AsyncSession = Depends(get_db),
 ):
     """Translate text between supported language pairs."""
-    result = await translate_text_controller(payload, db)
+    result = await translate_text_controller(payload, db, brand_uuid=uuid, domain_name=name)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ApiResponse(success=True, data=TranslationData(**result), error=None)
@@ -92,9 +94,13 @@ async def detect(payload: DetectionRequest):
     operation_id="translate_document",
     responses=COMMON_ERRORS,
 )
-async def document(payload: DocumentTranslationRequest):
+async def document(
+    payload: DocumentTranslationRequest,
+    uuid: str | None = Query(None, description="Optional Brand UUID to inject context"),
+    name: str | None = Query(None, description="Optional Domain name to apply rules"),
+):
     """Translate a full document by URL."""
-    result = await translate_document_controller(payload)
+    result = await translate_document_controller(payload, brand_uuid=uuid, domain_name=name)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ApiResponse(success=True, data=DocumentTranslationData(**result), error=None)

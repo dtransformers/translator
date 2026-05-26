@@ -31,7 +31,12 @@ from app.schemas.translation import (
 logger = logging.getLogger(__name__)
 
 
-async def translate_text_controller(payload: TranslationRequest, db: AsyncSession) -> dict:
+async def translate_text_controller(
+    payload: TranslationRequest,
+    db: AsyncSession,
+    brand_uuid: str | None = None,
+    domain_name: str | None = None,
+) -> dict:
     """
     Orchestrate the full translation pipeline:
     verify → cache check → complexity → translate → quality score → persist.
@@ -39,8 +44,6 @@ async def translate_text_controller(payload: TranslationRequest, db: AsyncSessio
     source_lang = payload.source_lang
     target_lang = payload.target_lang
     text = payload.text
-    brand_uuid = payload.brand_uuid
-    domain_name = payload.domain_name
 
     translation_svc = TranslationService(db)
     brand_svc = BrandService(db)
@@ -179,9 +182,18 @@ async def detect_language_controller(payload: DetectionRequest) -> dict:
     return {"detected_language": compat["detected_lang"]}
 
 
-async def translate_document_controller(payload: DocumentTranslationRequest) -> dict:
+async def translate_document_controller(
+    payload: DocumentTranslationRequest,
+    brand_uuid: str | None = None,
+    domain_name: str | None = None,
+) -> dict:
     """Document translation (stub — to be implemented)."""
+    data = payload.model_dump()
+    if brand_uuid:
+        data["brand_uuid"] = brand_uuid
+    if domain_name:
+        data["domain_name"] = domain_name
     return {
         "message": "translate document controller executed",
-        "data": payload.model_dump(),
+        "data": data,
     }

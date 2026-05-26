@@ -92,11 +92,11 @@ async def test_translate_text_with_domain(client: AsyncClient, mocker):
 
     response = await client.post(
         "/api/v1/translate",
+        params={"name": "ui"},
         json={
             "text": "Save",
             "source_lang": "en",
             "target_lang": "fr",
-            "domain_name": "ui",
         },
     )
 
