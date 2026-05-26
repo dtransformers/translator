@@ -1,6 +1,7 @@
 from .model import get_llm
 from .context import build_translation_context
 from .tools import get_available_tools
+from .rag import retrieve_rag_examples
 from .prompts import (
     get_summary_prompt,
     get_context_prompt,
@@ -17,6 +18,7 @@ __all__ = [
     "get_llm",
     "build_translation_context",
     "get_available_tools",
+    "retrieve_rag_examples",
     "get_summary_prompt",
     "get_context_prompt",
     "get_global_context_prompt",

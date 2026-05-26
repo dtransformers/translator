@@ -297,3 +297,25 @@ async def test_translate_text_controller_llm_rag_lookup(mocker):
     assert len(kwargs["similar_examples"]) == 1
     assert kwargs["similar_examples"][0]["source"] == "Hello world!"
     assert kwargs["similar_examples"][0]["translation"] == "¡Hola mundo!"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rag_examples(mocker):
+    from app.translations.models import Translation
+    from app.llms.rag import retrieve_rag_examples
+
+    translation_svc_mock = AsyncMock()
+    mock_record = Translation(value="Welcome", translation="Bienvenido")
+    translation_svc_mock.retrieve_similar_translations = AsyncMock(return_value=[mock_record])
+
+    result = await retrieve_rag_examples(
+        translation_svc=translation_svc_mock,
+        text="Welcome",
+        source_lang="en",
+        target_lang="es",
+        limit=3
+    )
+
+    assert len(result) == 1
+    assert result[0]["source"] == "Welcome"
+    assert result[0]["translation"] == "Bienvenido"

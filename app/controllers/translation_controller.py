@@ -33,6 +33,7 @@ from app.schemas.translation import (
     DetectionRequest,
     DocumentTranslationRequest,
 )
+from app.llms import retrieve_rag_examples
 
 logger = logging.getLogger(__name__)
 
@@ -102,43 +103,31 @@ async def translate_text_controller(
             "detected_input_lang": detected_input_lang or cached.detected_input_lang,
         }
 
-    # --- Step 4: Brand context ---
     brand_context = await brand_svc.get_brand_context(brand_uuid)
 
-    # Merge reusable units into the brand glossary
     unit_glossary = await translation_svc.build_glossary_from_units(text, target_lang)
     if unit_glossary:
         existing_glossary = brand_context.get("glossary", {})
         existing_glossary.update(unit_glossary)
         brand_context["glossary"] = existing_glossary
 
-    # --- Step 4.5: Domain rules ---
     domain_rules = {}
     if domain_name:
         domain = await domain_svc.get_by_name(domain_name)
         if domain and domain.rules:
             domain_rules = domain.rules
 
-    # --- Step 5: Complexity routing & translation ---
     complexity_score = calculate_complexity_score(text)
 
-    # Fetch semantically similar translations using pgvector for LLM RAG
     similar_examples = []
     if complexity_score >= COMPLEXITY_THRESHOLD:
-        try:
-            similar_records = await translation_svc.retrieve_similar_translations(
-                text=text,
-                source_lang=source_lang,
-                target_lang=target_lang,
-                limit=3,
-            )
-            similar_examples = [
-                {"source": r.value, "translation": r.translation}
-                for r in similar_records
-                if r.translation
-            ]
-        except Exception as e:
-            logger.warning("RAG retrieval failed: %s", e)
+        similar_examples = await retrieve_rag_examples(
+            translation_svc=translation_svc,
+            text=text,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            limit=3,
+        )
 
     try:
         translation_text = await translate(

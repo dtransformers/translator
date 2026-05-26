@@ -1,11 +1,13 @@
 import logging
-from typing import List, Dict
-from app.translations.service import TranslationService
+from typing import List, Dict, TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.translations.service import TranslationService
 
 logger = logging.getLogger(__name__)
 
 async def retrieve_rag_examples(
-    translation_svc: TranslationService,
+    translation_svc: "TranslationService",
     text: str,
     source_lang: str,
     target_lang: str,
