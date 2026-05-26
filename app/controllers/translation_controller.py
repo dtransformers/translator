@@ -1,56 +1,75 @@
-# Controller module setup to handle the business logic
+"""
+Translation controller — thin orchestrator that delegates to entity services.
+
+No direct repository access. All DB operations go through:
+    - TranslationService (translations entity)
+    - BrandService (brands entity)
+"""
+
 import time
 import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.translations.repository import TranslationRepository
+
+from app.translations.service import TranslationService
+from app.brands.service import BrandService
 from app.pipeline.verification import (
     is_translatable,
     is_source_target_compatible,
     is_in_supported_languages,
 )
-from app.pipeline.cache import get_translation_cache, save_translation_cache
 from app.pipeline.complexity import calculate_complexity_score
 from app.pipeline.translation import translate
 from app.pipeline.quality import score_translation
-from app.brands.service import get_brand_context
+from app.schemas.translation import (
+    TranslationRequest,
+    DetectionRequest,
+    DocumentTranslationRequest,
+)
 
 logger = logging.getLogger(__name__)
 
 
-async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
-    source_lang = payload.get("source_lang")
-    target_lang = payload.get("target_lang")
-    text = payload.get("text")
-    brand_uuid = payload.get("brand_uuid")
+async def translate_text_controller(payload: TranslationRequest, db: AsyncSession) -> dict:
+    """
+    Orchestrate the full translation pipeline:
+    verify → cache check → complexity → translate → quality score → persist.
+    """
+    source_lang = payload.source_lang
+    target_lang = payload.target_lang
+    text = payload.text
+    brand_uuid = payload.brand_uuid
 
-    if not source_lang or not target_lang or not text:
-        return {"error": "Missing source_lang, target_lang, or text in payload"}
-
-    brand_context = await get_brand_context(db, brand_uuid)
-
+    translation_svc = TranslationService(db)
+    brand_svc = BrandService(db)
 
     start_time = time.time()
-    repo = TranslationRepository(db)
 
+    # --- Step 1: Translatability check ---
     if not is_translatable(text):
         translation_time = time.time() - start_time
-        await repo.create_translation(
-            value=text, language=source_lang,
-            translation=text, translation_language=target_lang,
+        await translation_svc.create(
+            value=text,
+            language=source_lang,
+            translation=text,
+            translation_language=target_lang,
             is_successed=True,
             notes="Skipped: Input is not translatable (emoji/link/number/HTML)",
             translation_time=translation_time,
-            input_size=len(text), output_size=len(text),
+            input_size=len(text),
+            output_size=len(text),
         )
         return {"translation": text, "skipped": True, "reason": "not_translatable"}
 
+    # --- Step 2: Language compatibility ---
     compat = is_source_target_compatible(text, source_lang)
     detected_input_lang = compat["detected_lang"]
 
     if not is_in_supported_languages(source_lang, target_lang):
         return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-    cached = await get_translation_cache(text, source_lang, target_lang, db)
+    # --- Step 3: Cache lookup ---
+    cached = await translation_svc.find_cached(text, source_lang, target_lang)
     if cached:
         return {
             "translation": cached.translation,
@@ -59,21 +78,38 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
             "db_id": cached.id,
         }
 
+    # --- Step 4: Brand context ---
+    brand_context = await brand_svc.get_brand_context(brand_uuid)
+
+    # Merge reusable units into the brand glossary
+    unit_glossary = await translation_svc.build_glossary_from_units(text, target_lang)
+    if unit_glossary:
+        existing_glossary = brand_context.get("glossary", {})
+        existing_glossary.update(unit_glossary)
+        brand_context["glossary"] = existing_glossary
+
+    # --- Step 5: Complexity routing & translation ---
     complexity_score = calculate_complexity_score(text)
 
     try:
-        translation_text = translate(text, source_lang, target_lang, complexity_score)
+        translation_text = translate(
+            text, source_lang, target_lang, complexity_score, brand_context
+        )
         is_successed = True
         notes = None
     except NotImplementedError as e:
         translation_time = time.time() - start_time
-        await repo.create_translation(
-            value=text, language=source_lang,
-            translation=None, translation_language=target_lang,
+        await translation_svc.create(
+            value=text,
+            language=source_lang,
+            translation=None,
+            translation_language=target_lang,
             detected_input_lang=detected_input_lang,
-            is_successed=False, notes=str(e),
+            is_successed=False,
+            notes=str(e),
             translation_time=translation_time,
-            input_size=len(text), output_size=0,
+            input_size=len(text),
+            output_size=0,
         )
         return {"error": str(e), "complexity_score": complexity_score}
     except Exception as e:
@@ -83,16 +119,17 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
 
     translation_time_elapsed = time.time() - start_time
 
+    # --- Step 6: Quality scoring ---
     comet_score = None
     if is_successed and translation_text:
         try:
             comet_score = score_translation(text, translation_text)
         except Exception as e:
-            logger.warning(f"COMETKiwi scoring failed: {e}")
+            logger.warning("Quality scoring failed: %s", e)
             comet_score = None
 
-    new_record = await save_translation_cache(
-        repo=repo,
+    # --- Step 7: Persist with cache fields ---
+    new_record = await translation_svc.save_with_cache_fields(
         value=text,
         language=source_lang,
         translation=translation_text,
@@ -105,8 +142,11 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
         translation_time=translation_time_elapsed,
         input_size=len(text),
         output_size=len(translation_text) if translation_text else 0,
-        size_difference=(len(translation_text) - len(text)) / len(text) * 100
-        if translation_text else None,
+        size_difference=(
+            (len(translation_text) - len(text)) / len(text) * 100
+            if translation_text
+            else None
+        ),
     )
 
     return {
@@ -120,16 +160,15 @@ async def translate_text_controller(payload: dict, db: AsyncSession) -> dict:
     }
 
 
-async def detect_language_controller(payload: dict) -> dict:
+async def detect_language_controller(payload: DetectionRequest) -> dict:
     """Detect the language of input text using langdetect."""
-    text = payload.get("text")
-    if not text:
-        return {"error": "Missing text in payload"}
-
-    compat = is_source_target_compatible(text, "")
+    compat = is_source_target_compatible(payload.text, "")
     return {"detected_language": compat["detected_lang"]}
 
 
-async def translate_document_controller(payload: dict) -> dict:
-    # TODO: Implement document translation logic here
-    return {"message": "translate document controller executed", "data": payload}
+async def translate_document_controller(payload: DocumentTranslationRequest) -> dict:
+    """Document translation (stub — to be implemented)."""
+    return {
+        "message": "translate document controller executed",
+        "data": payload.model_dump(),
+    }

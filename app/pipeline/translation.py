@@ -1,30 +1,43 @@
+"""
+Translation pipeline — routing logic between MarianMT and LLM.
+"""
+
+import json
 import logging
+from typing import Any
+
 from app.machine_translation import marian_mt_service
+from app.llms.model import get_llm
+from app.llms.prompts import get_translation_draft_prompt
 
 logger = logging.getLogger(__name__)
 
 COMPLEXITY_THRESHOLD = 50
 
 
-import json
-from app.llms.model import get_llm
-from app.llms.prompts import get_translation_draft_prompt
+def translate_with_llm(
+    text: str,
+    source_lang: str,
+    target_lang: str,
+    brand_context: dict[str, Any] | None = None,
+) -> str:
+    """Translate text using the configured LLM, enriched with brand context."""
+    logger.info("Using LLM for translation from %s to %s", source_lang, target_lang)
 
-def translate_with_llm(text: str, source_lang: str, target_lang: str) -> str:
-    logger.info(f"Using LLM for translation from {source_lang} to {target_lang}")
+    ctx = brand_context or {}
     llm = get_llm()
     prompt = get_translation_draft_prompt()
     chain = prompt | llm
-    
+
     response = chain.invoke({
         "source_language": source_lang,
         "target_language": target_lang,
-        "industry": "General",
-        "summary": "General text",
-        "glossary": "{}",
-        "texts": json.dumps([text])
+        "industry": ctx.get("industry", "General"),
+        "summary": ctx.get("summary", "General text"),
+        "glossary": json.dumps(ctx.get("glossary", {})),
+        "texts": json.dumps([text]),
     })
-    
+
     try:
         content = response.content.replace("```json", "").replace("```", "").strip()
         translated_list = json.loads(content)
@@ -32,21 +45,39 @@ def translate_with_llm(text: str, source_lang: str, target_lang: str) -> str:
             return translated_list[0]
         return response.content
     except Exception as e:
-        logger.error(f"Failed to parse LLM response: {e}")
+        logger.error("Failed to parse LLM response: %s", e)
         return response.content
 
 
-def translate(text: str, source_lang: str, target_lang: str, complexity_score: int) -> str:
+def translate(
+    text: str,
+    source_lang: str,
+    target_lang: str,
+    complexity_score: int,
+    brand_context: dict[str, Any] | None = None,
+) -> str:
+    """
+    Route translation to MarianMT (simple texts) or LLM (complex texts).
 
+    Args:
+        text: Source text to translate.
+        source_lang: Source language code.
+        target_lang: Target language code.
+        complexity_score: Computed complexity (0-100). >= threshold → LLM.
+        brand_context: Optional brand context dict for LLM prompt enrichment.
+    """
     if complexity_score >= COMPLEXITY_THRESHOLD:
         logger.info(
-            f"Input complexity score is {complexity_score}/{COMPLEXITY_THRESHOLD}. "
-            f"Falling back to LLM translation."
+            "Input complexity score is %d/%d. Falling back to LLM translation.",
+            complexity_score,
+            COMPLEXITY_THRESHOLD,
         )
-        return translate_with_llm(text, source_lang, target_lang)
+        return translate_with_llm(text, source_lang, target_lang, brand_context)
 
     logger.info(
-        f"Translating with MarianMT (complexity={complexity_score}): "
-        f"{source_lang} -> {target_lang}"
+        "Translating with MarianMT (complexity=%d): %s -> %s",
+        complexity_score,
+        source_lang,
+        target_lang,
     )
     return marian_mt_service.translate_text(text, source_lang, target_lang)

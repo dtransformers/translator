@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     LLM_MODEL_NAME: str = "gemini-1.5-flash"
 
+    # Authentication
+    API_USERNAME: str = "admin"
+    API_PASSWORD: str = "changeme"
+
     @computed_field
     @property
     def DATABASE_URL(self) -> str:

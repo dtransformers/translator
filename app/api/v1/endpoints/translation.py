@@ -1,11 +1,18 @@
+"""
+Translation API endpoints (v1).
+
+Provides text translation, language detection, and document translation.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.session import get_db
 
+from app.db.session import get_db
+from app.core.auth import require_auth
 from app.controllers.translation_controller import (
     translate_text_controller,
     detect_language_controller,
-    translate_document_controller
+    translate_document_controller,
 )
 from app.schemas.translation import (
     ApiResponse,
@@ -14,37 +21,80 @@ from app.schemas.translation import (
     DetectionRequest,
     DetectionData,
     DocumentTranslationRequest,
-    DocumentTranslationData
+    DocumentTranslationData,
 )
+from app.schemas.errors import COMMON_ERRORS
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_auth)])
 
-@router.post("/translate", response_model=ApiResponse[TranslationData])
-async def translate(payload: TranslationRequest, db: AsyncSession = Depends(get_db)):
-    """
-    Route for text translation.
-    """
-    result = await translate_text_controller(payload.model_dump(), db)
+
+@router.post(
+    "/translate",
+    response_model=ApiResponse[TranslationData],
+    summary="Translate text",
+    description=(
+        "Translate a text string from a source language to a target language.\n\n"
+        "The pipeline includes:\n"
+        "- **Translatability check** — skips emojis, URLs, numbers, HTML\n"
+        "- **Multi-tier cache** — exact → normalized → semantic vector lookup\n"
+        "- **Complexity routing** — simple texts use MarianMT, complex texts use LLM\n"
+        "- **Quality scoring** — cosine-similarity-based quality estimation\n"
+        "- **Brand context** — optional brand-specific tone, glossary, audience\n"
+        "- **Reusable units** — known entity/phrase translations injected as glossary"
+    ),
+    response_description="Translated text with metadata",
+    operation_id="translate_text",
+    responses=COMMON_ERRORS,
+)
+async def translate(
+    payload: TranslationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Translate text between supported language pairs."""
+    result = await translate_text_controller(payload, db)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ApiResponse(success=True, data=TranslationData(**result), error=None)
 
-@router.post("/detecte", response_model=ApiResponse[DetectionData])
+
+@router.post(
+    "/detect",
+    response_model=ApiResponse[DetectionData],
+    summary="Detect language",
+    description=(
+        "Detect the language of the provided text using statistical analysis.\n\n"
+        "Returns an ISO 639-1 language code (e.g., `en`, `fr`, `ar`, `zh`)."
+    ),
+    response_description="Detected language code",
+    operation_id="detect_language",
+    responses=COMMON_ERRORS,
+)
 async def detect(payload: DetectionRequest):
-    """
-    Route for language detection.
-    """
-    result = await detect_language_controller(payload.model_dump())
+    """Detect the language of the input text."""
+    result = await detect_language_controller(payload)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ApiResponse(success=True, data=DetectionData(**result), error=None)
 
-@router.post("/document", response_model=ApiResponse[DocumentTranslationData])
+
+@router.post(
+    "/document",
+    response_model=ApiResponse[DocumentTranslationData],
+    summary="Translate document",
+    description=(
+        "Submit a document URL for translation. The document will be fetched, "
+        "parsed, and each translatable segment processed through the translation "
+        "pipeline.\n\n"
+        "> **Note**: This endpoint is a stub and will be fully implemented in a "
+        "future release."
+    ),
+    response_description="Document translation status",
+    operation_id="translate_document",
+    responses=COMMON_ERRORS,
+)
 async def document(payload: DocumentTranslationRequest):
-    """
-    Route for document translation.
-    """
-    result = await translate_document_controller(payload.model_dump())
+    """Translate a full document by URL."""
+    result = await translate_document_controller(payload)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ApiResponse(success=True, data=DocumentTranslationData(**result), error=None)
