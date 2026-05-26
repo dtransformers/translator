@@ -8,20 +8,26 @@ No direct repository access. All DB operations go through:
 
 import time
 import logging
+import os
+from urllib.parse import urlparse
+import httpx
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.translations.service import TranslationService
 from app.brands.service import BrandService
 from app.domains.service import DomainService
-from app.pipeline.verification import (
+from app.pipeline import (
     is_translatable,
     is_source_target_compatible,
     is_in_supported_languages,
+    calculate_complexity_score,
+    translate,
+    score_translation,
+    json_to_ast,
+    collect_translatable_nodes,
+    DocumentNode,
 )
-from app.pipeline.complexity import calculate_complexity_score
-from app.pipeline.translation import translate
-from app.pipeline.quality import score_translation
 from app.schemas.translation import (
     TranslationRequest,
     DetectionRequest,
@@ -36,6 +42,8 @@ async def translate_text_controller(
     db: AsyncSession,
     brand_uuid: str | None = None,
     domain_name: str | None = None,
+    filename: str | None = None,
+    property_name: str | None = None,
 ) -> dict:
     """
     Orchestrate the full translation pipeline:
@@ -64,6 +72,8 @@ async def translate_text_controller(
             translation_time=translation_time,
             input_size=len(text),
             output_size=len(text),
+            filename=filename,
+            property=property_name,
         )
         return {
             "message": "Translation skipped: Input is not translatable (emoji/link/number/HTML)",
@@ -128,6 +138,8 @@ async def translate_text_controller(
             translation_time=translation_time,
             input_size=len(text),
             output_size=0,
+            filename=filename,
+            property=property_name,
         )
         return {"error": str(e), "complexity_score": complexity_score}
     except Exception as e:
@@ -165,6 +177,8 @@ async def translate_text_controller(
             if translation_text
             else None
         ),
+        filename=filename,
+        property=property_name,
     )
 
     return {
@@ -184,16 +198,84 @@ async def detect_language_controller(payload: DetectionRequest) -> dict:
 
 async def translate_document_controller(
     payload: DocumentTranslationRequest,
+    db: AsyncSession,
     brand_uuid: str | None = None,
     domain_name: str | None = None,
 ) -> dict:
-    """Document translation (stub — to be implemented)."""
-    data = payload.model_dump()
-    if brand_uuid:
-        data["brand_uuid"] = brand_uuid
-    if domain_name:
-        data["domain_name"] = domain_name
+    """
+    Document translation: fetches document from URL, converts to AST,
+    translates each segment, and reconstitutes the document.
+    """
+    source_lang = payload.source_lang
+    target_lang = payload.target_lang
+    document_url = payload.document_url
+
+    # 1. Check supported languages
+    if not is_in_supported_languages(source_lang, target_lang):
+        return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
+
+    # 2. Extract filename from URL
+    try:
+        parsed_url = urlparse(document_url)
+        filename = os.path.basename(parsed_url.path) or "document.json"
+    except Exception:
+        filename = "document.json"
+
+    # 3. Fetch file content
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(document_url)
+            response.raise_for_status()
+            doc_data = response.json()
+        except httpx.HTTPError as e:
+            return {"error": f"Failed to fetch document: {str(e)}"}
+        except ValueError as e:
+            return {"error": f"Document is not valid JSON: {str(e)}"}
+
+    # 4. Parse JSON to AST
+    try:
+        root_node = json_to_ast(doc_data)
+        doc_node = DocumentNode(root_node, "json")
+    except Exception as e:
+        return {"error": f"Failed to parse document to AST: {str(e)}"}
+
+    # 5. Collect and translate translatable segments
+    translatable_nodes = collect_translatable_nodes(doc_node)
+    
+    for node in translatable_nodes:
+        # Wrap each segment in a TranslationRequest
+        seg_payload = TranslationRequest(
+            text=node.value,
+            source_lang=source_lang,
+            target_lang=target_lang,
+        )
+        try:
+            res = await translate_text_controller(
+                payload=seg_payload,
+                db=db,
+                brand_uuid=brand_uuid,
+                domain_name=domain_name,
+                filename=filename,
+                property_name=node.path,
+            )
+            if "error" in res:
+                logger.warning("Failed to translate segment '%s' in path %s: %s", node.value[:30], node.path, res["error"])
+                node.translated_value = node.value
+            else:
+                node.translated_value = res.get("translation", node.value)
+        except Exception as e:
+            logger.error("Error translating segment '%s': %s", node.value[:30], e)
+            node.translated_value = node.value
+
+    # 6. Reconstitute the document from AST
+    translated_document = doc_node.to_dict()
+
     return {
-        "message": "translate document controller executed",
-        "data": data,
+        "message": "Document translation completed successfully",
+        "data": {
+            "document_url": document_url,
+            "source_lang": source_lang,
+            "target_lang": target_lang,
+        },
+        "translated_document": translated_document,
     }

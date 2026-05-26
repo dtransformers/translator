@@ -8,6 +8,16 @@ from .verification import (
 from .complexity import calculate_complexity_score
 from .translation import translate, COMPLEXITY_THRESHOLD
 from .quality import score_translation
+from .document import (
+    ASTNode,
+    DocumentNode,
+    ObjectNode,
+    ArrayNode,
+    TextNode,
+    ValueNode,
+    json_to_ast,
+    collect_translatable_nodes,
+)
 
 __all__ = [
     "is_translatable",
@@ -19,4 +29,13 @@ __all__ = [
     "SUPPORTED_LANGUAGES",
     "SUPPORTED_PAIRS",
     "COMPLEXITY_THRESHOLD",
+    "ASTNode",
+    "DocumentNode",
+    "ObjectNode",
+    "ArrayNode",
+    "TextNode",
+    "ValueNode",
+    "json_to_ast",
+    "collect_translatable_nodes",
 ]
+

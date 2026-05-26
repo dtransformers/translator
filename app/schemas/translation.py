@@ -95,6 +95,7 @@ class DocumentTranslationRequest(BaseModel):
 class DocumentTranslationData(BaseModel):
     message: str = Field(..., description="Status message of the document translation processing")
     data: dict[str, Any] = Field(..., description="Echoed input payload or processing metadata")
+    translated_document: Optional[Any] = Field(None, description="The fully translated document")
 
     model_config = {
         "json_schema_extra": {
@@ -105,7 +106,8 @@ class DocumentTranslationData(BaseModel):
                         "document_url": "https://example.com/sample.docx",
                         "source_lang": "en",
                         "target_lang": "es"
-                    }
+                    },
+                    "translated_document": None
                 }
             ]
         }
