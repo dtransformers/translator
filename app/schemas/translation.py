@@ -13,6 +13,7 @@ class TranslationRequest(BaseModel):
     source_lang: str = Field(..., description="The source language code (e.g., 'en', 'fr')", min_length=2, max_length=10)
     target_lang: str = Field(..., description="The target language code (e.g., 'es', 'ar')", min_length=2, max_length=10)
     brand_uuid: Optional[str] = Field(None, description="Optional Brand UUID to inject context into the LLM prompt")
+    domain_name: Optional[str] = Field(None, description="Optional Domain name to apply strict translation rules (e.g., 'ui', 'marketing')")
 
     model_config = {
         "json_schema_extra": {

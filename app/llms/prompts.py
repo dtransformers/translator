@@ -104,6 +104,9 @@ Context:
 - Industry: {industry}
 - Summary: {summary}
 
+Domain Rules:
+{domain_rules}
+
 Constraint Hierarchy (Priority 1 is most important):
 1. MEANING: Preserve the original meaning exactly. No omissions or additions.
 2. TECHNICAL: Preserve all placeholders ({{{{name}}}}, %s, :var, {{var}}), numbers, and brand names.

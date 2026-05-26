@@ -1,6 +1,6 @@
-{
-  "ui": {
-    "description": "User interface elements and product navigation.",
+[{
+  "name":"ui",
+  "description": "User interface elements and product navigation.",
     "content_types": [
       "button",
       "label",
@@ -19,7 +19,8 @@
       "cache_priority": "high"
     }
   },
-  "system": {
+ {
+  "name":"system",
     "description": "System notifications, alerts, and validation messages.",
     "content_types": [
       "error_message",
@@ -35,7 +36,8 @@
       "tone": "neutral"
     }
   },
-  "marketing": {
+ {
+  "name":"marketing",
     "description": "Persuasive and promotional content.",
     "content_types": [
       "landing_page",
@@ -52,7 +54,8 @@
       "cultural_localization": true
     }
   },
-  "legal": {
+ {
+    "name":"legal",
     "description": "Contracts, policies, and compliance documents.",
     "content_types": [
       "terms_of_service",
@@ -68,7 +71,8 @@
       "preserve_legal_semantics": true
     }
   },
-  "technical": {
+ {
+    "name":"technical",
     "description": "Developer and engineering documentation.",
     "content_types": [
       "api_documentation",
@@ -84,7 +88,8 @@
       "syntax_aware": true
     }
   },
-  "documentation": {
+  {
+    "name":"documentation",
     "description": "General instructional and knowledge-base content.",
     "content_types": [
       "faq",
@@ -99,7 +104,8 @@
       "moderate_creativity": false
     }
   },
-  "support": {
+  {
+    "name":"support",
     "description": "Customer support conversations and canned replies.",
     "content_types": [
       "chat_response",
@@ -113,7 +119,8 @@
       "conversation_aware": true
     }
   },
-  "hospitality": {
+  {
+    "name":"hospitality",
     "description": "Restaurant, hotel, and hospitality workflows.",
     "content_types": [
       "menu_item",
@@ -129,7 +136,8 @@
       "preserve_food_naming": true
     }
   },
-  "ecommerce": {
+ {
+    "name":"ecommerce",
     "description": "Commerce and retail experiences.",
     "content_types": [
       "product_description",
@@ -144,7 +152,8 @@
       "seo_sensitive": true
     }
   },
-  "financial": {
+ {
+    "name":"financial",
     "description": "Financial and payment-related content.",
     "content_types": [
       "invoice",
@@ -159,7 +168,8 @@
       "no_ambiguity": true
     }
   },
-  "seo": {
+  {
+    "name":"seo",
     "description": "Search engine optimized content.",
     "content_types": [
       "meta_title",
@@ -174,7 +184,8 @@
       "metadata_length_control": true
     }
   },
-  "social": {
+  {
+    "name":"social",
     "description": "Social media and informal communication.",
     "content_types": [
       "tweet",
@@ -189,7 +200,8 @@
       "informal_tone": true
     }
   },
-  "multimedia": {
+  {
+    "name":"multimedia",
     "description": "Subtitle and audiovisual localization.",
     "content_types": [
       "subtitle",
@@ -203,7 +215,8 @@
       "reading_speed_optimization": true
     }
   },
-  "security": {
+  {
+    "name":"security",
     "description": "Authentication and security-sensitive flows.",
     "content_types": [
       "otp_message",
@@ -217,7 +230,8 @@
       "preserve_security_semantics": true
     }
   },
-  "code": {
+  {
+    "name":"code",
     "description": "Structured configuration and source code content.",
     "content_types": [
       "json",
@@ -233,7 +247,8 @@
       "syntax_validation": true
     }
   },
-  "brand_voice": {
+  {
+    "name":"brand_voice",
     "description": "Tone and branding overlays applied across domains.",
     "variants": [
       "luxury",
@@ -245,4 +260,4 @@
       "playful"
     ]
   }
-}
+]

@@ -22,6 +22,7 @@ async def init_db():
 
     from app.brands.models import Brand 
     from app.translations.models import Translation, ReusableUnit  
+    from app.domains.models import Domain
 
     logger = logging.getLogger(__name__)
 

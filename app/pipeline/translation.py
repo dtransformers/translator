@@ -20,6 +20,7 @@ async def translate_with_llm(
     source_lang: str,
     target_lang: str,
     brand_context: dict[str, Any] | None = None,
+    domain_rules: dict[str, Any] | None = None,
 ) -> str:
     """Translate text using the configured LLM, enriched with brand context."""
     logger.info("Using LLM for translation from %s to %s", source_lang, target_lang)
@@ -35,6 +36,7 @@ async def translate_with_llm(
         "industry": ctx.get("industry", "General"),
         "summary": ctx.get("summary", "General text"),
         "glossary": json.dumps(ctx.get("glossary", {})),
+        "domain_rules": json.dumps(domain_rules or {}),
         "texts": json.dumps([text]),
     })
 
@@ -55,6 +57,7 @@ async def translate(
     target_lang: str,
     complexity_score: int,
     brand_context: dict[str, Any] | None = None,
+    domain_rules: dict[str, Any] | None = None,
 ) -> str:
     """
     Route translation to MarianMT (simple texts) or LLM (complex texts).
@@ -74,7 +77,7 @@ async def translate(
             complexity_score,
             COMPLEXITY_THRESHOLD,
         )
-        return await translate_with_llm(text, source_lang, target_lang, brand_context)
+        return await translate_with_llm(text, source_lang, target_lang, brand_context, domain_rules)
 
     logger.info(
         "Translating with MarianMT (complexity=%d): %s -> %s",

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.translations.service import TranslationService
 from app.brands.service import BrandService
+from app.domains.service import DomainService
 from app.pipeline.verification import (
     is_translatable,
     is_source_target_compatible,
@@ -39,9 +40,11 @@ async def translate_text_controller(payload: TranslationRequest, db: AsyncSessio
     target_lang = payload.target_lang
     text = payload.text
     brand_uuid = payload.brand_uuid
+    domain_name = payload.domain_name
 
     translation_svc = TranslationService(db)
     brand_svc = BrandService(db)
+    domain_svc = DomainService(db)
 
     start_time = time.time()
 
@@ -93,12 +96,19 @@ async def translate_text_controller(payload: TranslationRequest, db: AsyncSessio
         existing_glossary.update(unit_glossary)
         brand_context["glossary"] = existing_glossary
 
+    # --- Step 4.5: Domain rules ---
+    domain_rules = {}
+    if domain_name:
+        domain = await domain_svc.get_by_name(domain_name)
+        if domain and domain.rules:
+            domain_rules = domain.rules
+
     # --- Step 5: Complexity routing & translation ---
     complexity_score = calculate_complexity_score(text)
 
     try:
         translation_text = await translate(
-            text, source_lang, target_lang, complexity_score, brand_context
+            text, source_lang, target_lang, complexity_score, brand_context, domain_rules
         )
         is_successed = True
         notes = None
