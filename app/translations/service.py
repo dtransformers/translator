@@ -111,44 +111,69 @@ class TranslationService:
         )
         l2_result = await self._db.execute(l2_query)
         l2_hit = l2_result.scalars().first()
-        if l2_hit and not entities:
-            logger.info("L2 Cache Hit (normalized) for: %s", text[:30])
-            return l2_hit
-
-        # --- L3: Semantic vector ---
+        if l2_hit:
+            if not entities:
+                logger.info("L2 Cache Hit (normalized) for: %s", text[:30])
+                return l2_hit
+            else:
+                logger.info(
+                    "L2 normalized match found but %d entities present — "
+                    "cannot reuse cached translation, re-translating",
+                    len(entities),
+                )
+        SEMANTIC_DISTANCE_THRESHOLD = 0.08
         try:
             query_embedding = await asyncio.to_thread(get_embedding, normalized_text)
             l3_query = (
-                select(Translation)
+                select(
+                    Translation,
+                    Translation.embedding.cosine_distance(query_embedding).label("distance"),
+                )
                 .where(
                     Translation.language == source_lang,
                     Translation.translation_language == target_lang,
-                    Translation.is_successed == True,  # noqa: E712
-                    Translation.embedding != None,  # noqa: E711
+                    Translation.is_successed == True,  
+                    Translation.embedding != None, 
                 )
-                .order_by(Translation.embedding.cosine_distance(query_embedding))
+                .order_by("distance")
                 .limit(1)
             )
             l3_result = await self._db.execute(l3_query)
-            l3_hit = l3_result.scalars().first()
-            if l3_hit:
-                logger.info("L3 Cache Hit (semantic) for: %s", text[:30])
-                # Semantic hits are informational only — we don't return them
-                # unless a similarity threshold is met in the future.
+            l3_row = l3_result.first()
+
+            if l3_row is not None:
+                l3_hit, distance = l3_row[0], l3_row[1]
+                similarity = 1.0 - distance
+                logger.info(
+                    "L3 Semantic candidate for '%s': distance=%.4f, similarity=%.4f",
+                    text[:30], distance, similarity,
+                )
+                if distance <= SEMANTIC_DISTANCE_THRESHOLD:
+                    if entities:
+                        logger.info(
+                            "L3 semantic match (sim=%.4f) but %d entities "
+                            "present — cannot reuse, re-translating",
+                            similarity, len(entities),
+                        )
+                    else:
+                        logger.info(
+                            "L3 Cache Hit (semantic, sim=%.4f) for: %s",
+                            similarity, text[:30],
+                        )
+                        return l3_hit
+                else:
+                    logger.info(
+                        "L3 below threshold (sim=%.4f < 0.92), skipping cache",
+                        similarity,
+                    )
         except Exception as e:
             logger.warning("L3 Semantic cache failed: %s", e)
 
         return None
 
-    # ------------------------------------------------------------------ #
-    #  Save with cache enrichment
-    # ------------------------------------------------------------------ #
 
     async def save_with_cache_fields(self, **kwargs) -> Translation:
-        """
-        Persist a translation record with caching metadata populated:
-        text_hash, normalized_text, normalized_hash, and embedding vector.
-        """
+
         text = kwargs.get("value")
         source_lang = kwargs.get("language")
 
@@ -170,9 +195,7 @@ class TranslationService:
 
         return await self._repo.create_translation(**kwargs)
 
-    # ------------------------------------------------------------------ #
-    #  Reusable Units
-    # ------------------------------------------------------------------ #
+
 
     async def create_reusable_unit(
         self,
@@ -181,7 +204,6 @@ class TranslationService:
         translation: str,
         unit_type: str,
     ) -> ReusableUnit:
-        """Create a new reusable translation unit (entity, phrase, etc.)."""
         unit = ReusableUnit(
             source_text=source_text,
             target_language=target_language,
@@ -198,24 +220,19 @@ class TranslationService:
         source_text: str,
         target_language: str,
     ) -> list[ReusableUnit]:
-        """
-        Find reusable units that match (or are contained in) the source text
-        for a given target language.
-        """
+
         query = select(ReusableUnit).where(
             ReusableUnit.target_language == target_language,
         )
         result = await self._db.execute(query)
         all_units = result.scalars().all()
 
-        # Filter to units whose source_text appears in the input
         return [u for u in all_units if u.source_text.lower() in source_text.lower()]
 
     async def get_all_reusable_units(
         self,
         target_language: str | None = None,
     ) -> list[ReusableUnit]:
-        """List all reusable units, optionally filtered by target language."""
         query = select(ReusableUnit)
         if target_language:
             query = query.where(ReusableUnit.target_language == target_language)
@@ -223,7 +240,6 @@ class TranslationService:
         return list(result.scalars().all())
 
     async def delete_reusable_unit(self, unit_id: int) -> bool:
-        """Delete a reusable unit by ID. Returns True if deleted."""
         result = await self._db.execute(
             select(ReusableUnit).where(ReusableUnit.id == unit_id)
         )
@@ -239,9 +255,6 @@ class TranslationService:
         source_text: str,
         target_language: str,
     ) -> dict[str, str]:
-        """
-        Build a glossary dict from reusable units found in the source text.
-        Returns {source_term: translated_term} for use in LLM prompts.
-        """
+
         units = await self.find_reusable_units(source_text, target_language)
         return {u.source_text: u.translation for u in units}

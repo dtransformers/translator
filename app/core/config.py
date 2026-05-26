@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: str
-    IS_DYNAMIC_LOADING: bool = True
     DUCKLING_URL: str = "http://translator_duckling:8000/parse"
 
     # LLM Settings

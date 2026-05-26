@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 COMPLEXITY_THRESHOLD = 50
 
 
-def translate_with_llm(
+async def translate_with_llm(
     text: str,
     source_lang: str,
     target_lang: str,
@@ -29,7 +29,7 @@ def translate_with_llm(
     prompt = get_translation_draft_prompt()
     chain = prompt | llm
 
-    response = chain.invoke({
+    response = await chain.ainvoke({
         "source_language": source_lang,
         "target_language": target_lang,
         "industry": ctx.get("industry", "General"),
@@ -49,7 +49,7 @@ def translate_with_llm(
         return response.content
 
 
-def translate(
+async def translate(
     text: str,
     source_lang: str,
     target_lang: str,
@@ -66,13 +66,15 @@ def translate(
         complexity_score: Computed complexity (0-100). >= threshold → LLM.
         brand_context: Optional brand context dict for LLM prompt enrichment.
     """
+    import asyncio
+    
     if complexity_score >= COMPLEXITY_THRESHOLD:
         logger.info(
             "Input complexity score is %d/%d. Falling back to LLM translation.",
             complexity_score,
             COMPLEXITY_THRESHOLD,
         )
-        return translate_with_llm(text, source_lang, target_lang, brand_context)
+        return await translate_with_llm(text, source_lang, target_lang, brand_context)
 
     logger.info(
         "Translating with MarianMT (complexity=%d): %s -> %s",
@@ -80,4 +82,4 @@ def translate(
         source_lang,
         target_lang,
     )
-    return marian_mt_service.translate_text(text, source_lang, target_lang)
+    return await asyncio.to_thread(marian_mt_service.translate_text, text, source_lang, target_lang)

@@ -19,6 +19,10 @@ async def init_db():
     import logging
     from app.db.base import Base
     from sqlalchemy import text
+
+    from app.brands.models import Brand 
+    from app.translations.models import Translation, ReusableUnit  
+
     logger = logging.getLogger(__name__)
 
     try:

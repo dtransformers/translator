@@ -59,7 +59,12 @@ async def translate_text_controller(payload: TranslationRequest, db: AsyncSessio
             input_size=len(text),
             output_size=len(text),
         )
-        return {"translation": text, "skipped": True, "reason": "not_translatable"}
+        return {
+            "message": "Translation skipped: Input is not translatable (emoji/link/number/HTML)",
+            "translation": text,
+            "skipped": True,
+            "reason": "not_translatable",
+        }
 
     # --- Step 2: Language compatibility ---
     compat = is_source_target_compatible(text, source_lang)
@@ -72,10 +77,10 @@ async def translate_text_controller(payload: TranslationRequest, db: AsyncSessio
     cached = await translation_svc.find_cached(text, source_lang, target_lang)
     if cached:
         return {
+            "message": "Translation retrieved from cache",
             "translation": cached.translation,
             "cached": True,
             "score": cached.score,
-            "db_id": cached.id,
         }
 
     # --- Step 4: Brand context ---
@@ -92,7 +97,7 @@ async def translate_text_controller(payload: TranslationRequest, db: AsyncSessio
     complexity_score = calculate_complexity_score(text)
 
     try:
-        translation_text = translate(
+        translation_text = await translate(
             text, source_lang, target_lang, complexity_score, brand_context
         )
         is_successed = True
@@ -150,10 +155,8 @@ async def translate_text_controller(payload: TranslationRequest, db: AsyncSessio
     )
 
     return {
-        "message": "Translation completed",
+        "message": "Translation completed" if is_successed else f"Translation failed: {notes}",
         "translation": translation_text,
-        "db_id": new_record.id,
-        "is_successed": is_successed,
         "score": comet_score,
         "complexity_score": complexity_score,
         "detected_input_lang": detected_input_lang,

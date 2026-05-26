@@ -1,0 +1,248 @@
+{
+  "ui": {
+    "description": "User interface elements and product navigation.",
+    "content_types": [
+      "button",
+      "label",
+      "menu",
+      "tooltip",
+      "navigation",
+      "form_field",
+      "modal",
+      "dialog"
+    ],
+    "rules": {
+      "creativity": "low",
+      "preserve_placeholders": true,
+      "strict_glossary": true,
+      "brevity_required": true,
+      "cache_priority": "high"
+    }
+  },
+  "system": {
+    "description": "System notifications, alerts, and validation messages.",
+    "content_types": [
+      "error_message",
+      "warning",
+      "success_message",
+      "status_update",
+      "validation_message"
+    ],
+    "rules": {
+      "creativity": "very_low",
+      "preserve_variables": true,
+      "strict_consistency": true,
+      "tone": "neutral"
+    }
+  },
+  "marketing": {
+    "description": "Persuasive and promotional content.",
+    "content_types": [
+      "landing_page",
+      "campaign",
+      "ad_copy",
+      "headline",
+      "slogan",
+      "cta"
+    ],
+    "rules": {
+      "creativity": "high",
+      "allow_transcreation": true,
+      "tone_sensitive": true,
+      "cultural_localization": true
+    }
+  },
+  "legal": {
+    "description": "Contracts, policies, and compliance documents.",
+    "content_types": [
+      "terms_of_service",
+      "privacy_policy",
+      "agreement",
+      "compliance_notice",
+      "consent_form"
+    ],
+    "rules": {
+      "creativity": "none",
+      "strict_terminology": true,
+      "human_review_required": true,
+      "preserve_legal_semantics": true
+    }
+  },
+  "technical": {
+    "description": "Developer and engineering documentation.",
+    "content_types": [
+      "api_documentation",
+      "architecture_doc",
+      "integration_guide",
+      "sdk_docs",
+      "cli_reference"
+    ],
+    "rules": {
+      "preserve_code_blocks": true,
+      "preserve_identifiers": true,
+      "strict_technical_terms": true,
+      "syntax_aware": true
+    }
+  },
+  "documentation": {
+    "description": "General instructional and knowledge-base content.",
+    "content_types": [
+      "faq",
+      "tutorial",
+      "guide",
+      "troubleshooting",
+      "help_article"
+    ],
+    "rules": {
+      "clarity_first": true,
+      "step_consistency": true,
+      "moderate_creativity": false
+    }
+  },
+  "support": {
+    "description": "Customer support conversations and canned replies.",
+    "content_types": [
+      "chat_response",
+      "ticket_reply",
+      "support_macro",
+      "bot_response"
+    ],
+    "rules": {
+      "empathetic_tone": true,
+      "tone_consistency": true,
+      "conversation_aware": true
+    }
+  },
+  "hospitality": {
+    "description": "Restaurant, hotel, and hospitality workflows.",
+    "content_types": [
+      "menu_item",
+      "reservation_message",
+      "waiter_instruction",
+      "guest_notification",
+      "food_description"
+    ],
+    "rules": {
+      "culinary_glossary": true,
+      "regional_localization": true,
+      "tone": "welcoming",
+      "preserve_food_naming": true
+    }
+  },
+  "ecommerce": {
+    "description": "Commerce and retail experiences.",
+    "content_types": [
+      "product_description",
+      "checkout",
+      "shipping_update",
+      "cart_message",
+      "product_attribute"
+    ],
+    "rules": {
+      "conversion_optimized": true,
+      "preserve_units": true,
+      "seo_sensitive": true
+    }
+  },
+  "financial": {
+    "description": "Financial and payment-related content.",
+    "content_types": [
+      "invoice",
+      "payment_message",
+      "transaction_notice",
+      "balance_statement",
+      "receipt"
+    ],
+    "rules": {
+      "strict_precision": true,
+      "regulated_terminology": true,
+      "no_ambiguity": true
+    }
+  },
+  "seo": {
+    "description": "Search engine optimized content.",
+    "content_types": [
+      "meta_title",
+      "meta_description",
+      "seo_article",
+      "category_page",
+      "blog_post"
+    ],
+    "rules": {
+      "keyword_preservation": true,
+      "localized_search_intent": true,
+      "metadata_length_control": true
+    }
+  },
+  "social": {
+    "description": "Social media and informal communication.",
+    "content_types": [
+      "tweet",
+      "caption",
+      "comment",
+      "social_post",
+      "community_reply"
+    ],
+    "rules": {
+      "slang_adaptation": true,
+      "emoji_preservation": true,
+      "informal_tone": true
+    }
+  },
+  "multimedia": {
+    "description": "Subtitle and audiovisual localization.",
+    "content_types": [
+      "subtitle",
+      "caption",
+      "voiceover_script",
+      "dub_script"
+    ],
+    "rules": {
+      "timing_constraints": true,
+      "character_limit": true,
+      "reading_speed_optimization": true
+    }
+  },
+  "security": {
+    "description": "Authentication and security-sensitive flows.",
+    "content_types": [
+      "otp_message",
+      "verification_prompt",
+      "permission_notice",
+      "security_alert"
+    ],
+    "rules": {
+      "extreme_clarity": true,
+      "concise": true,
+      "preserve_security_semantics": true
+    }
+  },
+  "code": {
+    "description": "Structured configuration and source code content.",
+    "content_types": [
+      "json",
+      "yaml",
+      "xml",
+      "code_comment",
+      "config_file"
+    ],
+    "rules": {
+      "never_translate_keys": true,
+      "preserve_formatting": true,
+      "preserve_identifiers": true,
+      "syntax_validation": true
+    }
+  },
+  "brand_voice": {
+    "description": "Tone and branding overlays applied across domains.",
+    "variants": [
+      "luxury",
+      "premium",
+      "friendly",
+      "minimalist",
+      "youthful",
+      "corporate",
+      "playful"
+    ]
+  }
+}

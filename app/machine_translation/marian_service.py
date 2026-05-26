@@ -4,8 +4,7 @@ from transformers import MarianMTModel, MarianTokenizer
 logger = logging.getLogger(__name__)
 
 class MarianMTService:
-    def __init__(self, is_dynamic_loading: bool = True):
-        self.is_dynamic_loading = is_dynamic_loading
+    def __init__(self):
         self.models = {}
         self.tokenizers = {}
         
@@ -20,11 +19,10 @@ class MarianMTService:
         return f"Helsinki-NLP/opus-mt-{src}-{tgt}"
 
     def preload_models(self):
-        if not self.is_dynamic_loading:
-            logger.info("Preloading all MarianMT models (this may take a while)...")
-            for src, tgt in self.supported_pairs:
-                self._load_model(src, tgt, self._get_model_name(src, tgt))
-            logger.info("Finished preloading models.")
+        logger.info("Preloading all MarianMT models (this may take a while)...")
+        for src, tgt in self.supported_pairs:
+            self._load_model(src, tgt, self._get_model_name(src, tgt))
+        logger.info("Finished preloading models.")
 
     def _load_model(self, src: str, tgt: str, model_name: str):
         pair = (src, tgt)
@@ -42,7 +40,7 @@ class MarianMTService:
             
         model_name = self._get_model_name(source_lang, target_lang)
         
-        if self.is_dynamic_loading and pair not in self.models:
+        if pair not in self.models:
             self._load_model(source_lang, target_lang, model_name)
             
         tokenizer = self.tokenizers[pair]

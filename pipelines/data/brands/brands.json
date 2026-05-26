@@ -1,0 +1,22 @@
+{
+    "name": "osoul",
+    "description": "The official brand voice guidelines.",
+    "tone": "professional",
+    "audience": "professional users",
+    "industry": "translation",
+    "domain_focus": [
+        "ui",
+        "system",
+        "technical"
+    ],
+    "glossary": [
+        {
+            "en": "Brand Name",
+            "ar": "اسم العلامة التجارية"
+        },
+        {
+            "en": "Brand",
+            "ar": "العلامة التجارية"
+        }
+    ]
+}

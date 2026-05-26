@@ -27,10 +27,8 @@ class TranslationRequest(BaseModel):
     }
 
 class TranslationData(BaseModel):
-    message: Optional[str] = Field(None, description="Status message explaining the result")
+    message: str = Field(..., description="Status message explaining the result")
     translation: Optional[str] = Field(None, description="The translated text, or the original text if skipped")
-    db_id: Optional[int] = Field(None, description="The database record ID for this translation")
-    is_successed: Optional[bool] = Field(None, description="True if the translation succeeded")
     score: Optional[float] = Field(None, description="Quality estimation (COMET) score of the translation")
     complexity_score: Optional[float] = Field(None, description="The computed complexity score of the source text")
     detected_input_lang: Optional[str] = Field(None, description="The detected source language code")
@@ -44,8 +42,6 @@ class TranslationData(BaseModel):
                 {
                     "message": "Translation completed",
                     "translation": "Hola mundo, esta es una solicitud de traducción de prueba.",
-                    "db_id": 15,
-                    "is_successed": True,
                     "score": 0.89,
                     "complexity_score": 0.12,
                     "detected_input_lang": "en"

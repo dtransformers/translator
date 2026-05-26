@@ -1,9 +1,3 @@
-"""
-Translation API — main application entry point.
-
-FastAPI application with OpenAPI/Swagger documentation, health check,
-exception handlers, and Basic HTTP Authentication.
-"""
 
 from contextlib import asynccontextmanager
 
@@ -17,9 +11,6 @@ from app.core.config import settings
 from app.machine_translation import marian_mt_service
 from app.db.session import init_db
 
-# --------------------------------------------------------------------- #
-#  OpenAPI Tag Metadata
-# --------------------------------------------------------------------- #
 
 OPENAPI_TAGS = [
     {
@@ -46,16 +37,59 @@ OPENAPI_TAGS = [
 ]
 
 
-# --------------------------------------------------------------------- #
-#  Lifespan
-# --------------------------------------------------------------------- #
+
+health_status = {
+    "db": "pending",
+    "duckling": "pending",
+    "models": "pending",
+    "llm": "pending"
+}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    import asyncio
+    import httpx
+    from sqlalchemy import text
+    from app.db.session import engine
+    from app.llms.model import get_llm
+    
+    # 1. DB Check
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        await init_db()
+        health_status["db"] = "ok"
+    except Exception as e:
+        health_status["db"] = "error"
+        raise RuntimeError(f"DB Startup Check Failed: {e}")
 
-    if not settings.IS_DYNAMIC_LOADING:
-        marian_mt_service.preload_models()
+    # 2. Duckling Check
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(settings.DUCKLING_URL, data={"text": "hello", "locale": "en_XX"})
+            resp.raise_for_status()
+        health_status["duckling"] = "ok"
+    except Exception as e:
+        health_status["duckling"] = "error"
+        raise RuntimeError(f"Duckling Startup Check Failed: {e}")
+
+    # 3. LLM Check
+    try:
+        llm = get_llm()
+        await llm.ainvoke("ping")
+        health_status["llm"] = "ok"
+    except Exception as e:
+        health_status["llm"] = "error"
+        raise RuntimeError(f"LLM Startup Check Failed: {e}")
+
+    # 4. Models Preloading
+    try:
+        await asyncio.to_thread(marian_mt_service.preload_models)
+        health_status["models"] = "ok"
+    except Exception as e:
+        health_status["models"] = "error"
+        raise RuntimeError(f"MarianMT Models Preloading Failed: {e}")
+
     yield
 
 
@@ -99,12 +133,15 @@ app = FastAPI(
     "/health",
     tags=["health"],
     summary="Health check",
-    description="Returns service status. Use for liveness/readiness probes.",
+    description="Returns service status including DB, Duckling, LLM, and Models.",
     operation_id="health_check",
 )
 async def health():
-    """Lightweight liveness probe."""
-    return {"status": "healthy"}
+    """Health endpoint tracking connection states."""
+    is_healthy = all(v == "ok" for v in health_status.values())
+    if not is_healthy:
+        return JSONResponse(status_code=503, content={"status": "error", "components": health_status})
+    return {"status": "healthy", "components": health_status}
 
 
 # --------------------------------------------------------------------- #
