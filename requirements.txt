@@ -16,3 +16,9 @@ langchain
 langchain-google-genai
 langchain-community
 sacremoses
+pytest
+pytest-asyncio
+httpx
+pytest-mock
+pgvector
+sentence-transformers

@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg16
     container_name: translator_db
     restart: always
     environment:
@@ -31,7 +31,15 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - translations_database:/var/lib/postgresql/data
+
+  duckling:
+    image: rasa/duckling
+    container_name: translator_duckling
+    platform: linux/amd64
+    ports:
+      - "8001:8000"
+    restart: always
 
 volumes:
-  postgres_data:
+  translations_database:
