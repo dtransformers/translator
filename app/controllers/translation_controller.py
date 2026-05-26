@@ -92,11 +92,14 @@ async def translate_text_controller(
     # --- Step 3: Cache lookup ---
     cached = await translation_svc.find_cached(text, source_lang, target_lang)
     if cached:
+        complexity_score = calculate_complexity_score(text)
         return {
             "message": "Translation retrieved from cache",
             "translation": cached.translation,
             "cached": True,
             "score": cached.score,
+            "complexity_score": complexity_score,
+            "detected_input_lang": detected_input_lang or cached.detected_input_lang,
         }
 
     # --- Step 4: Brand context ---
@@ -119,9 +122,33 @@ async def translate_text_controller(
     # --- Step 5: Complexity routing & translation ---
     complexity_score = calculate_complexity_score(text)
 
+    # Fetch semantically similar translations using pgvector for LLM RAG
+    similar_examples = []
+    if complexity_score >= COMPLEXITY_THRESHOLD:
+        try:
+            similar_records = await translation_svc.retrieve_similar_translations(
+                text=text,
+                source_lang=source_lang,
+                target_lang=target_lang,
+                limit=3,
+            )
+            similar_examples = [
+                {"source": r.value, "translation": r.translation}
+                for r in similar_records
+                if r.translation
+            ]
+        except Exception as e:
+            logger.warning("RAG retrieval failed: %s", e)
+
     try:
         translation_text = await translate(
-            text, source_lang, target_lang, complexity_score, brand_context, domain_rules
+            text,
+            source_lang,
+            target_lang,
+            complexity_score,
+            brand_context,
+            domain_rules,
+            similar_examples=similar_examples,
         )
         is_successed = True
         notes = None

@@ -21,14 +21,24 @@ async def translate_with_llm(
     target_lang: str,
     brand_context: dict[str, Any] | None = None,
     domain_rules: dict[str, Any] | None = None,
+    similar_examples: list[dict] | None = None,
 ) -> str:
-    """Translate text using the configured LLM, enriched with brand context."""
+    """Translate text using the configured LLM, enriched with brand context and RAG examples."""
     logger.info("Using LLM for translation from %s to %s", source_lang, target_lang)
 
     ctx = brand_context or {}
     llm = get_llm()
     prompt = get_translation_draft_prompt()
     chain = prompt | llm
+
+    # Format the similar translations RAG context
+    if similar_examples:
+        rag_str = "\n".join(
+            f"- Source: \"{item['source']}\"\n  Translation: \"{item['translation']}\""
+            for item in similar_examples
+        )
+    else:
+        rag_str = "None"
 
     response = await chain.ainvoke({
         "source_language": source_lang,
@@ -37,6 +47,7 @@ async def translate_with_llm(
         "summary": ctx.get("summary", "General text"),
         "glossary": json.dumps(ctx.get("glossary", {})),
         "domain_rules": json.dumps(domain_rules or {}),
+        "rag_examples": rag_str,
         "texts": json.dumps([text]),
     })
 
@@ -58,6 +69,7 @@ async def translate(
     complexity_score: int,
     brand_context: dict[str, Any] | None = None,
     domain_rules: dict[str, Any] | None = None,
+    similar_examples: list[dict] | None = None,
 ) -> str:
     """
     Route translation to MarianMT (simple texts) or LLM (complex texts).
@@ -68,6 +80,8 @@ async def translate(
         target_lang: Target language code.
         complexity_score: Computed complexity (0-100). >= threshold → LLM.
         brand_context: Optional brand context dict for LLM prompt enrichment.
+        domain_rules: Optional domain rules.
+        similar_examples: Optional similar examples for RAG.
     """
     import asyncio
     
@@ -77,7 +91,9 @@ async def translate(
             complexity_score,
             COMPLEXITY_THRESHOLD,
         )
-        return await translate_with_llm(text, source_lang, target_lang, brand_context, domain_rules)
+        return await translate_with_llm(
+            text, source_lang, target_lang, brand_context, domain_rules, similar_examples
+        )
 
     logger.info(
         "Translating with MarianMT (complexity=%d): %s -> %s",

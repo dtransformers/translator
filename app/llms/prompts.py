@@ -115,6 +115,9 @@ Constraint Hierarchy (Priority 1 is most important):
 Glossary:
 {glossary}
 
+Similar Translation Examples (Reference only):
+{rag_examples}
+
 Output:
 Return ONLY a raw JSON array of translated strings.
 

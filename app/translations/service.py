@@ -258,3 +258,51 @@ class TranslationService:
 
         units = await self.find_reusable_units(source_text, target_language)
         return {u.source_text: u.translation for u in units}
+
+    async def retrieve_similar_translations(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str,
+        limit: int = 3,
+        max_distance: float = 0.4,
+    ) -> list[Translation]:
+        """
+        Retrieve up to `limit` successful translations that are semantically
+        similar to the normalized input text (cosine distance <= max_distance).
+        """
+        if not text:
+            return []
+
+        abstracted_text, _ = await abstract_entities(text, language=source_lang)
+        normalized_text = canonicalize_text(abstracted_text)
+
+        try:
+            query_embedding = await asyncio.to_thread(get_embedding, normalized_text)
+            query = (
+                select(
+                    Translation,
+                    Translation.embedding.cosine_distance(query_embedding).label("distance"),
+                )
+                .where(
+                    Translation.language == source_lang,
+                    Translation.translation_language == target_lang,
+                    Translation.is_successed == True,
+                    Translation.embedding != None,
+                )
+                .order_by("distance")
+                .limit(limit)
+            )
+            result = await self._db.execute(query)
+            rows = result.all()
+
+            similar_examples = []
+            for row in rows:
+                translation_record, distance = row[0], row[1]
+                if distance <= max_distance:
+                    similar_examples.append(translation_record)
+
+            return similar_examples
+        except Exception as e:
+            logger.warning("RAG retrieval failed: %s", e)
+            return []

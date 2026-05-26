@@ -192,3 +192,108 @@ async def test_translate_document_endpoint_integration(client: AsyncClient, mock
     res_data = response.json()
     assert res_data["success"] is True
     assert res_data["data"]["translated_document"]["hello"] == "Hola"
+
+
+@pytest.mark.asyncio
+async def test_translate_text_controller_cache_hit_fields(mocker):
+    from app.translations.models import Translation
+    from app.schemas.translation import TranslationRequest
+    from app.controllers.translation_controller import translate_text_controller
+
+    db_mock = AsyncMock()
+    mock_translation = Translation(
+        value="Hello world",
+        translation="Hola mundo",
+        score=0.95,
+        detected_input_lang="en"
+    )
+
+    mocker.patch(
+        "app.controllers.translation_controller.TranslationService.find_cached",
+        return_value=mock_translation
+    )
+
+    payload = TranslationRequest(
+        text="Hello world",
+        source_lang="en",
+        target_lang="es"
+    )
+
+    result = await translate_text_controller(payload, db=db_mock)
+    assert result["cached"] is True
+    assert result["translation"] == "Hola mundo"
+    assert result["score"] == 0.95
+    assert "complexity_score" in result
+    assert result["detected_input_lang"] == "en"
+
+
+@pytest.mark.asyncio
+async def test_translate_text_controller_llm_rag_lookup(mocker):
+    from app.translations.models import Translation
+    from app.schemas.translation import TranslationRequest
+    from app.controllers.translation_controller import translate_text_controller
+
+    db_mock = AsyncMock()
+    
+    # 1. No cache hit
+    mocker.patch(
+        "app.controllers.translation_controller.TranslationService.find_cached",
+        return_value=None
+    )
+
+    # 2. Similar RAG examples from DB
+    similar_record = Translation(
+        value="Hello world!",
+        translation="¡Hola mundo!"
+    )
+    mocker.patch(
+        "app.controllers.translation_controller.TranslationService.retrieve_similar_translations",
+        return_value=[similar_record]
+    )
+
+    # 3. Mock other services
+    mocker.patch(
+        "app.controllers.translation_controller.BrandService.get_brand_context",
+        return_value={}
+    )
+    mocker.patch(
+        "app.controllers.translation_controller.TranslationService.build_glossary_from_units",
+        return_value={}
+    )
+    mocker.patch(
+        "app.controllers.translation_controller.TranslationService.save_with_cache_fields"
+    )
+    mocker.patch(
+        "app.controllers.translation_controller.score_translation",
+        return_value=0.9
+    )
+
+    # Mock the translate function to check similar_examples argument
+    mock_translate = AsyncMock(return_value="Hola mundito")
+    mocker.patch(
+        "app.controllers.translation_controller.translate",
+        new=mock_translate
+    )
+
+    # Ensure complexity triggers LLM (>= 50)
+    mocker.patch(
+        "app.controllers.translation_controller.calculate_complexity_score",
+        return_value=60
+    )
+
+    payload = TranslationRequest(
+        text="Hello world!",
+        source_lang="en",
+        target_lang="es"
+    )
+
+    result = await translate_text_controller(payload, db=db_mock)
+    
+    assert result["translation"] == "Hola mundito"
+    # Verify mock_translate was called with the RAG example
+    mock_translate.assert_called_once()
+    kwargs = mock_translate.call_args[1]
+    assert "similar_examples" in kwargs
+    assert len(kwargs["similar_examples"]) == 1
+    assert kwargs["similar_examples"][0]["source"] == "Hello world!"
+    assert kwargs["similar_examples"][0]["translation"] == "¡Hola mundo!"
