@@ -24,6 +24,12 @@ class Settings(BaseSettings):
 
     COMPLEXITY_THRESHOLD: int = 50
 
+    # S3 / MinIO
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_REGION_NAME: str | None = None
+    S3_ENDPOINT_URL: str | None = None
+
     @computed_field
     @property
     def DATABASE_URL(self) -> str:

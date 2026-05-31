@@ -22,6 +22,8 @@ from app.schemas.translation import (
     DetectionData,
     DocumentTranslationRequest,
     DocumentTranslationData,
+    BucketTranslationRequest,
+    BucketTranslationData,
 )
 from app.schemas.errors import COMMON_ERRORS
 
@@ -105,3 +107,26 @@ async def document(
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ApiResponse(success=True, data=DocumentTranslationData(**result), error=None)
+
+
+@router.post(
+    "/bucket",
+    response_model=ApiResponse[BucketTranslationData],
+    summary="Translate S3/MinIO Bucket path",
+    description=(
+        "Translate all JSON files in an S3/MinIO bucket from a source prefix "
+        "and upload them to a target prefix concurrently."
+    ),
+    response_description="Bucket translation status",
+    operation_id="translate_bucket",
+    responses=COMMON_ERRORS,
+)
+async def bucket(
+    payload: BucketTranslationRequest,
+):
+    """Translate JSON files in a bucket prefix."""
+    from app.controllers.s3_controller import translate_bucket_controller
+    result = await translate_bucket_controller(payload)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return ApiResponse(success=True, data=BucketTranslationData(**result), error=None)

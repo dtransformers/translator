@@ -112,3 +112,45 @@ class DocumentTranslationData(BaseModel):
             ]
         }
     }
+
+
+class BucketTranslationRequest(BaseModel):
+    bucket_name: str = Field(..., description="The name of the S3/MinIO bucket")
+    source_prefix: str = Field(..., description="The prefix of the files to translate (e.g. 'assets/content/en/')")
+    target_prefix: str = Field(..., description="The prefix to upload translated files (e.g. 'assets/content/ar/')")
+    source_lang: str = Field(..., description="The source language code")
+    target_lang: str = Field(..., description="The target language code")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "bucket_name": "my-bucket",
+                    "source_prefix": "content/en/",
+                    "target_prefix": "content/ar/",
+                    "source_lang": "en",
+                    "target_lang": "ar"
+                }
+            ]
+        }
+    }
+
+
+class BucketTranslationData(BaseModel):
+    message: str = Field(..., description="Status message of the bucket translation process")
+    processed_files: int = Field(0, description="Number of files processed")
+    failed_files: int = Field(0, description="Number of files failed")
+    details: list[dict] = Field([], description="Details of each file processed")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "message": "Bucket translation completed successfully",
+                    "processed_files": 5,
+                    "failed_files": 0,
+                    "details": [{"file": "content/en/about.json", "status": "success", "target_key": "content/ar/about.json"}]
+                }
+            ]
+        }
+    }
