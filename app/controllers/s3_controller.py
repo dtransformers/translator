@@ -1,26 +1,86 @@
 import asyncio
 import logging
+import uuid
+import os
 from typing import List, Dict, Any
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.translation import BucketTranslationRequest, TranslationRequest
 from app.services.s3_service import S3Service
 from app.db.session import async_session
 from app.controllers.translation_controller import translate_text_controller
 from app.pipeline import json_to_ast, collect_translatable_nodes, DocumentNode
+from app.translations.models import BucketTranslationOperation, FileTranslationOperation
 
 logger = logging.getLogger(__name__)
 
+async def create_bucket_operation(payload: BucketTranslationRequest, db: AsyncSession) -> str:
+    operation_id = str(uuid.uuid4())
+    bucket_op = BucketTranslationOperation(
+        id=operation_id,
+        bucket_name=payload.bucket_name,
+        source_prefix=payload.source_prefix,
+        target_prefix=payload.target_prefix,
+        source_lang=payload.source_lang,
+        target_lang=payload.target_lang,
+        status="PENDING",
+        total_files=0,
+        processed_files=0,
+        failed_files=0,
+        skipped_files=0
+    )
+    db.add(bucket_op)
+    await db.commit()
+    return operation_id
+
 async def process_s3_file(
     s3_service: S3Service,
+    operation_id: str,
+    file_id: str,
     bucket_name: str,
     source_key: str,
     target_key: str,
     source_lang: str,
     target_lang: str,
-) -> dict:
-    status = {"file": source_key, "status": "failed", "target_key": target_key, "error": None}
+    file_hash: str,
+):
+    """Process a single JSON file from S3 and update DB incrementally."""
+    status = "FAILED"
+    error_message = None
     
     try:
+        # Check cache
+        async with async_session() as db:
+            stmt = select(FileTranslationOperation).where(
+                FileTranslationOperation.file_key == source_key,
+                FileTranslationOperation.file_hash == file_hash,
+                FileTranslationOperation.status == "SUCCESS"
+            )
+            result = await db.execute(stmt)
+            cached_file = result.scalars().first()
+            
+            if cached_file:
+                # File already processed successfully with the same hash
+                logger.info(f"Skipping {source_key} due to cache hit (hash: {file_hash}).")
+                # We update the current file operation to SKIPPED
+                await db.execute(
+                    update(FileTranslationOperation)
+                    .where(FileTranslationOperation.id == file_id)
+                    .values(status="SKIPPED")
+                )
+                await db.commit()
+                # Update bucket operation skipped count
+                await db.execute(
+                    update(BucketTranslationOperation)
+                    .where(BucketTranslationOperation.id == operation_id)
+                    .values(skipped_files=BucketTranslationOperation.skipped_files + 1)
+                )
+                await db.commit()
+                return
+
+        # If not cached, continue with translation
         doc_data = await asyncio.to_thread(s3_service.download_json, bucket_name, source_key)
         
         root_node = json_to_ast(doc_data)
@@ -38,7 +98,7 @@ async def process_s3_file(
                     res = await translate_text_controller(
                         payload=seg_payload,
                         db=db,
-                        filename=source_key.split('/')[-1],
+                        filename=os.path.basename(source_key),
                         property_name=node.path,
                     )
                     if "error" in res:
@@ -53,82 +113,134 @@ async def process_s3_file(
         translated_document = doc_node.to_dict()
         
         await asyncio.to_thread(s3_service.upload_json, bucket_name, target_key, translated_document)
-        
-        status["status"] = "success"
+        status = "SUCCESS"
+
     except Exception as e:
         import traceback
         from botocore.exceptions import ClientError
         logger.error("Failed to process file %s: %s", source_key, e)
-        status["error"] = str(e)
-        status["traceback"] = traceback.format_exc()
+        error_message = str(e)
         if isinstance(e, ClientError):
-            status["boto3_response"] = e.response
-        
-    return status
+            error_message += f"\nResponse: {e.response}"
+        error_message += f"\nTraceback: {traceback.format_exc()}"
 
-async def translate_bucket_controller(payload: BucketTranslationRequest) -> dict:
+    # Update the DB for this file
+    async with async_session() as db:
+        await db.execute(
+            update(FileTranslationOperation)
+            .where(FileTranslationOperation.id == file_id)
+            .values(status=status, error_message=error_message)
+        )
+        # Update bucket operation counts
+        if status == "SUCCESS":
+            await db.execute(
+                update(BucketTranslationOperation)
+                .where(BucketTranslationOperation.id == operation_id)
+                .values(processed_files=BucketTranslationOperation.processed_files + 1)
+            )
+        else:
+            await db.execute(
+                update(BucketTranslationOperation)
+                .where(BucketTranslationOperation.id == operation_id)
+                .values(failed_files=BucketTranslationOperation.failed_files + 1)
+            )
+        await db.commit()
+
+
+async def background_bucket_translation(operation_id: str, payload: BucketTranslationRequest):
     s3_service = S3Service()
     
+    async with async_session() as db:
+        await db.execute(
+            update(BucketTranslationOperation)
+            .where(BucketTranslationOperation.id == operation_id)
+            .values(status="PROCESSING")
+        )
+        await db.commit()
+
     try:
-        keys = await asyncio.to_thread(
+        files = await asyncio.to_thread(
             s3_service.list_json_files, payload.bucket_name, payload.source_prefix
         )
     except Exception as e:
-        import traceback
-        from botocore.exceptions import ClientError
-        error_details = {"error": f"Failed to list files in bucket: {str(e)}", "traceback": traceback.format_exc()}
-        if isinstance(e, ClientError):
-            error_details["boto3_response"] = e.response
-        return error_details
+        async with async_session() as db:
+            await db.execute(
+                update(BucketTranslationOperation)
+                .where(BucketTranslationOperation.id == operation_id)
+                .values(status="FAILED")
+            )
+            await db.commit()
+        logger.error(f"Bucket translation {operation_id} failed to list files: {e}")
+        return
 
-    if not keys:
-        return {
-            "message": "No JSON files found in the specified prefix.",
-            "processed_files": 0,
-            "failed_files": 0,
-            "details": []
-        }
+    async with async_session() as db:
+        await db.execute(
+            update(BucketTranslationOperation)
+            .where(BucketTranslationOperation.id == operation_id)
+            .values(total_files=len(files))
+        )
+        await db.commit()
 
     tasks = []
-    for key in keys:
-        # Determine target key by replacing source_prefix with target_prefix
+    
+    for file_obj in files:
+        if isinstance(file_obj, str):
+            # Fallback if dictionary format is not implemented properly
+            key = file_obj
+            size = 0
+            etag = ""
+        else:
+            key = file_obj['Key']
+            size = file_obj['Size']
+            etag = file_obj['ETag']
+            
+        file_hash = f"{etag}-{size}"
+        
+        file_id = str(uuid.uuid4())
+        file_name = os.path.basename(key)
+        extension = os.path.splitext(file_name)[1] if '.' in file_name else None
+        
         if key.startswith(payload.source_prefix):
             target_key = payload.target_prefix + key[len(payload.source_prefix):]
         else:
             target_key = payload.target_prefix + key
             
+        async with async_session() as db:
+            file_op = FileTranslationOperation(
+                id=file_id,
+                bucket_operation_id=operation_id,
+                file_key=key,
+                file_name=file_name,
+                extension=extension,
+                file_size=size,
+                file_hash=file_hash,
+                status="PENDING"
+            )
+            db.add(file_op)
+            await db.commit()
+            
         tasks.append(
             process_s3_file(
                 s3_service=s3_service,
+                operation_id=operation_id,
+                file_id=file_id,
                 bucket_name=payload.bucket_name,
                 source_key=key,
                 target_key=target_key,
                 source_lang=payload.source_lang,
                 target_lang=payload.target_lang,
+                file_hash=file_hash
             )
         )
 
     # Process all files concurrently
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.gather(*tasks, return_exceptions=True)
     
-    details = []
-    processed_count = 0
-    failed_count = 0
-    
-    for res in results:
-        if isinstance(res, dict):
-            details.append(res)
-            if res.get("status") == "success":
-                processed_count += 1
-            else:
-                failed_count += 1
-        else:
-            details.append({"status": "failed", "error": str(res)})
-            failed_count += 1
-
-    return {
-        "message": "Bucket translation completed.",
-        "processed_files": processed_count,
-        "failed_files": failed_count,
-        "details": details
-    }
+    # Mark bucket operation as completed
+    async with async_session() as db:
+        await db.execute(
+            update(BucketTranslationOperation)
+            .where(BucketTranslationOperation.id == operation_id)
+            .values(status="COMPLETED")
+        )
+        await db.commit()

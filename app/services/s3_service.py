@@ -18,9 +18,9 @@ class S3Service:
             endpoint_url=settings.S3_ENDPOINT_URL
         )
 
-    def list_json_files(self, bucket_name: str, prefix: str) -> List[str]:
-        """List all JSON files under a specific prefix in the bucket."""
-        keys = []
+    def list_json_files(self, bucket_name: str, prefix: str) -> List[Dict[str, Any]]:
+        """List all JSON files under a specific prefix in the bucket with metadata."""
+        files = []
         try:
             paginator = self.s3_client.get_paginator('list_objects_v2')
             pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
@@ -30,12 +30,16 @@ class S3Service:
                     for obj in page['Contents']:
                         key = obj['Key']
                         if key.endswith('.json'):
-                            keys.append(key)
+                            files.append({
+                                'Key': key,
+                                'Size': obj.get('Size', 0),
+                                'ETag': obj.get('ETag', '').strip('"')
+                            })
         except ClientError as e:
             logger.error(f"Error listing objects in bucket {bucket_name} with prefix {prefix}: {e}")
             raise
             
-        return keys
+        return files
 
     def download_json(self, bucket_name: str, key: str) -> Dict[str, Any]:
         """Download and parse a JSON file from the bucket."""

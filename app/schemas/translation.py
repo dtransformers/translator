@@ -154,3 +154,30 @@ class BucketTranslationData(BaseModel):
             ]
         }
     }
+
+
+class FileOperationStatusResponse(BaseModel):
+    id: str
+    file_key: str
+    file_name: Optional[str] = None
+    extension: Optional[str] = None
+    tag: Optional[str] = None
+    status: str
+    file_size: Optional[int] = None
+    total_chars: Optional[int] = None
+    error_message: Optional[str] = None
+
+class BucketOperationStatusResponse(BaseModel):
+    id: str
+    bucket_name: str
+    source_prefix: str
+    target_prefix: str
+    source_lang: str
+    target_lang: str
+    status: str
+    total_files: int
+    processed_files: int
+    failed_files: int
+    skipped_files: int
+    files: Optional[list[FileOperationStatusResponse]] = None
+
