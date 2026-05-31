@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     API_USERNAME: str = "admin"
     API_PASSWORD: str = "changeme"
 
+    COMPLEXITY_THRESHOLD: int = 50
+
     @computed_field
     @property
     def DATABASE_URL(self) -> str:

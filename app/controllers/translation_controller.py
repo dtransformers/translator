@@ -34,6 +34,7 @@ from app.schemas.translation import (
     DocumentTranslationRequest,
 )
 from app.llms import retrieve_rag_examples
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ async def translate_text_controller(
     complexity_score = calculate_complexity_score(text)
 
     similar_examples = []
-    if complexity_score >= COMPLEXITY_THRESHOLD:
+    if complexity_score >= settings.COMPLEXITY_THRESHOLD:
         similar_examples = await retrieve_rag_examples(
             translation_svc=translation_svc,
             text=text,

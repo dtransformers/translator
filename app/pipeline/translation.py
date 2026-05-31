@@ -9,10 +9,9 @@ from typing import Any
 from app.machine_translation import marian_mt_service
 from app.llms.model import get_llm
 from app.llms.prompts import get_translation_draft_prompt
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-COMPLEXITY_THRESHOLD = 50
 
 
 async def translate_with_llm(
@@ -85,11 +84,11 @@ async def translate(
     """
     import asyncio
     
-    if complexity_score >= COMPLEXITY_THRESHOLD:
+    if complexity_score >= settings.COMPLEXITY_THRESHOLD:
         logger.info(
             "Input complexity score is %d/%d. Falling back to LLM translation.",
             complexity_score,
-            COMPLEXITY_THRESHOLD,
+            settings.COMPLEXITY_THRESHOLD,
         )
         return await translate_with_llm(
             text, source_lang, target_lang, brand_context, domain_rules, similar_examples

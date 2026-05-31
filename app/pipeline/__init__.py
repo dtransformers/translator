@@ -6,7 +6,7 @@ from .verification import (
     SUPPORTED_PAIRS,
 )
 from .complexity import calculate_complexity_score
-from .translation import translate, COMPLEXITY_THRESHOLD
+from .translation import translate
 from .quality import score_translation
 from .document import (
     ASTNode,
@@ -28,7 +28,6 @@ __all__ = [
     "score_translation",
     "SUPPORTED_LANGUAGES",
     "SUPPORTED_PAIRS",
-    "COMPLEXITY_THRESHOLD",
     "ASTNode",
     "DocumentNode",
     "ObjectNode",
