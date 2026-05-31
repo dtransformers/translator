@@ -124,9 +124,8 @@ async def document(
 async def bucket(
     payload: BucketTranslationRequest,
 ):
-    """Translate JSON files in a bucket prefix."""
     from app.controllers.s3_controller import translate_bucket_controller
     result = await translate_bucket_controller(payload)
     if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+        raise HTTPException(status_code=400, detail=result)
     return ApiResponse(success=True, data=BucketTranslationData(**result), error=None)

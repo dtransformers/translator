@@ -18,19 +18,15 @@ async def process_s3_file(
     source_lang: str,
     target_lang: str,
 ) -> dict:
-    """Process a single JSON file from S3."""
     status = {"file": source_key, "status": "failed", "target_key": target_key, "error": None}
     
     try:
-        # Download and parse JSON (offloaded to thread pool)
         doc_data = await asyncio.to_thread(s3_service.download_json, bucket_name, source_key)
         
-        # Parse to AST
         root_node = json_to_ast(doc_data)
         doc_node = DocumentNode(root_node, "json")
         translatable_nodes = collect_translatable_nodes(doc_node)
         
-        # Translate nodes
         async with async_session() as db:
             for node in translatable_nodes:
                 seg_payload = TranslationRequest(
@@ -54,21 +50,23 @@ async def process_s3_file(
                     logger.error("Error translating segment in %s: %s", source_key, e)
                     node.translated_value = node.value
 
-        # Reconstitute document
         translated_document = doc_node.to_dict()
         
-        # Upload back to S3 (offloaded to thread pool)
         await asyncio.to_thread(s3_service.upload_json, bucket_name, target_key, translated_document)
         
         status["status"] = "success"
     except Exception as e:
+        import traceback
+        from botocore.exceptions import ClientError
         logger.error("Failed to process file %s: %s", source_key, e)
         status["error"] = str(e)
+        status["traceback"] = traceback.format_exc()
+        if isinstance(e, ClientError):
+            status["boto3_response"] = e.response
         
     return status
 
 async def translate_bucket_controller(payload: BucketTranslationRequest) -> dict:
-    """Orchestrate translation of all JSON files in a bucket prefix."""
     s3_service = S3Service()
     
     try:
@@ -76,7 +74,12 @@ async def translate_bucket_controller(payload: BucketTranslationRequest) -> dict
             s3_service.list_json_files, payload.bucket_name, payload.source_prefix
         )
     except Exception as e:
-        return {"error": f"Failed to list files in bucket: {str(e)}"}
+        import traceback
+        from botocore.exceptions import ClientError
+        error_details = {"error": f"Failed to list files in bucket: {str(e)}", "traceback": traceback.format_exc()}
+        if isinstance(e, ClientError):
+            error_details["boto3_response"] = e.response
+        return error_details
 
     if not keys:
         return {
