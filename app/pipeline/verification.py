@@ -2,10 +2,8 @@ import re
 import emoji
 from langdetect import detect, LangDetectException
 
-# Supported language codes
 SUPPORTED_LANGUAGES = {"en", "fr", "es", "ar", "zh"}
 
-# Supported directional pairs (source, target)
 SUPPORTED_PAIRS = {
     ("en", "fr"), ("fr", "en"),
     ("en", "es"), ("es", "en"),
@@ -13,7 +11,6 @@ SUPPORTED_PAIRS = {
     ("en", "zh"), ("zh", "en"),
 }
 
-# Regex patterns for untranslatable content
 URL_PATTERN = re.compile(
     r'^(https?://|www\.)\S+$', re.IGNORECASE
 )

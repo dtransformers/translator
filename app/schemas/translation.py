@@ -164,6 +164,7 @@ class FileOperationStatusResponse(BaseModel):
     tag: Optional[str] = None
     status: str
     file_size: Optional[int] = None
+    etag: Optional[str] = None
     total_chars: Optional[int] = None
     error_message: Optional[str] = None
 

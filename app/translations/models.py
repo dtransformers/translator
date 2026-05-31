@@ -15,7 +15,9 @@ class Translation(Base):
     detected_input_lang = Column(Text, nullable=True)
     detected_output_lang = Column(Text, nullable=True)
     is_successed = Column(Boolean, default=False)
-    score = Column(Float, default=None, nullable=True)
+    score = Column(Float, default=None, nullable=True) # Legacy
+    trust_score = Column(Float, default=None, nullable=True)
+    complexity_score = Column(Float, default=None, nullable=True)
     is_approved = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
     verified_at = Column(DateTime(timezone=True), default=None, nullable=True)
@@ -72,6 +74,7 @@ class FileTranslationOperation(Base):
     extension = Column(String(50), nullable=True)
     tag = Column(String(255), nullable=True)
     file_hash = Column(String(255), nullable=True, index=True)
+    etag = Column(String(255), nullable=True)
     file_size = Column(Integer, nullable=True)
     total_chars = Column(Integer, nullable=True)
     status = Column(String(50), default="PENDING") 

@@ -84,16 +84,15 @@ async def translate_text_controller(
             "reason": "not_translatable",
         }
 
-    # --- Step 2: Language compatibility ---
     compat = is_source_target_compatible(text, source_lang)
     detected_input_lang = compat["detected_lang"]
 
     if not is_in_supported_languages(source_lang, target_lang):
         return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-    # --- Step 3: Cache lookup ---
+
     cached = await translation_svc.find_cached(text, source_lang, target_lang)
-    if cached:
+    if cached and cached.trust_score is not None and cached.trust_score >= 0.85:
         complexity_score = calculate_complexity_score(text)
         return {
             "message": "Translation retrieved from cache",

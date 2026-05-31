@@ -182,6 +182,7 @@ async def get_bucket_files_status(operation_id: str, db: AsyncSession = Depends(
             tag=f.tag,
             status=f.status,
             file_size=f.file_size,
+            etag=f.etag,
             total_chars=f.total_chars,
             error_message=f.error_message
         ) for f in files

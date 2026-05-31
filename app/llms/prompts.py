@@ -109,8 +109,9 @@ Domain Rules:
 
 Constraint Hierarchy (Priority 1 is most important):
 1. MEANING: Preserve the original meaning exactly. No omissions or additions.
-2. TECHNICAL: Preserve all placeholders ({{{{name}}}}, %s, :var, {{var}}), numbers, and brand names.
-3. GLOSSARY: Use the provided glossary terms strictly.
+2. TECHNICAL: Preserve all placeholders ({{{{name}}}}, %s, :var, {{{{var}}}}), numbers, and brand names.
+3. FORMAT: If a text looks like a serialized JSON array (e.g. `["Item 1", "Item 2"]`), the translated string MUST remain a valid serialized JSON array.
+4. GLOSSARY: Use the provided glossary terms strictly.
 
 Glossary:
 {glossary}
@@ -224,6 +225,7 @@ Corrected Translation: "من الداخل إلى الخارج"
 
 Instructions:
 - Fix grammatical errors, fluency issues, or placeholder corruption.
+- If the source text is a stringified JSON array (e.g. `["a", "b"]`), the corrected translation MUST also be a stringified JSON array.
 - DO NOT translate the source back to English.
 - DO NOT provide any explanation, commentary, or introduction.
 - Return ONLY the corrected translation in {target_language}.

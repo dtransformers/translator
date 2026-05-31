@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import translation, brands
-from app.domains import controller as domains
+from app.api.v1.endpoints import translation, brands, domains, review, debug
 
 api_router = APIRouter()
 
@@ -9,3 +8,5 @@ api_router = APIRouter()
 api_router.include_router(translation.router, tags=["translation"])
 api_router.include_router(brands.router, prefix="/brands", tags=["brands"])
 api_router.include_router(domains.router)
+api_router.include_router(review.router, prefix="/review", tags=["review"])
+api_router.include_router(debug.router, prefix="/debug", tags=["debug"])

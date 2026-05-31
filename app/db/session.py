@@ -32,6 +32,16 @@ async def init_db():
             logger.info("Database connection established successfully.")
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             await conn.run_sync(Base.metadata.create_all)
+            
+            # Auto-migrate new columns
+            try:
+                await conn.execute(text("ALTER TABLE translations ADD COLUMN IF NOT EXISTS trust_score FLOAT"))
+                await conn.execute(text("ALTER TABLE translations ADD COLUMN IF NOT EXISTS complexity_score FLOAT"))
+                await conn.execute(text("UPDATE translations SET trust_score = score WHERE trust_score IS NULL"))
+                logger.info("Database migration for trust_score and complexity_score complete.")
+            except Exception as e:
+                logger.warning(f"Column addition failed (might already exist): {e}")
+                
             logger.info("Database tables verified/created.")
     except Exception as e:
         logger.error(f"Failed to connect to the database or create tables: {e}")

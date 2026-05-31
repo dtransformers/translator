@@ -236,6 +236,7 @@ async def background_bucket_translation(operation_id: str, payload: BucketTransl
                 file_name=file_name,
                 extension=extension,
                 file_size=size,
+                etag=etag,
                 file_hash=file_hash,
                 status="PENDING"
             )
