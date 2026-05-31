@@ -45,6 +45,7 @@ async def process_s3_file(
     source_lang: str,
     target_lang: str,
     file_hash: str,
+    brand_uuid: str | None = None,
 ):
     """Process a single JSON file from S3 and update DB incrementally."""
     status = "FAILED"
@@ -121,6 +122,7 @@ async def process_s3_file(
                     res = await translate_text_controller(
                         payload=seg_payload,
                         db=db,
+                        brand_uuid=brand_uuid,
                         filename=os.path.basename(source_key),
                         property_name=node.path,
                     )
@@ -253,7 +255,8 @@ async def background_bucket_translation(operation_id: str, payload: BucketTransl
                 target_key=target_key,
                 source_lang=payload.source_lang,
                 target_lang=payload.target_lang,
-                file_hash=file_hash
+                file_hash=file_hash,
+                brand_uuid=payload.brand_uuid
             )
         )
 

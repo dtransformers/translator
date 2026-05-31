@@ -99,7 +99,8 @@ async def document(
     db: AsyncSession = Depends(get_db),
 ):
     """Translate a full document by URL."""
-    result = await translate_document_controller(payload, db, brand_uuid=uuid, domain_name=name)
+    brand_uuid = payload.brand_uuid or uuid
+    result = await translate_document_controller(payload, db, brand_uuid=brand_uuid, domain_name=name)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ApiResponse(success=True, data=DocumentTranslationData(**result), error=None)

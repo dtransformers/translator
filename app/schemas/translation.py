@@ -79,6 +79,7 @@ class DocumentTranslationRequest(BaseModel):
     document_url: str = Field(..., description="The URL of the document file to translate")
     source_lang: str = Field(..., description="The source language code")
     target_lang: str = Field(..., description="The target language code")
+    brand_uuid: Optional[str] = Field(None, description="Optional brand UUID for tone and glossary context")
 
     model_config = {
         "json_schema_extra": {
@@ -86,7 +87,8 @@ class DocumentTranslationRequest(BaseModel):
                 {
                     "document_url": "https://example.com/sample.docx",
                     "source_lang": "en",
-                    "target_lang": "es"
+                    "target_lang": "es",
+                    "brand_uuid": "123e4567-e89b-12d3-a456-426614174000"
                 }
             ]
         }
@@ -120,6 +122,7 @@ class BucketTranslationRequest(BaseModel):
     target_prefix: str = Field(..., description="The prefix to upload translated files (e.g. 'assets/content/ar/')")
     source_lang: str = Field(..., description="The source language code")
     target_lang: str = Field(..., description="The target language code")
+    brand_uuid: Optional[str] = Field(None, description="Optional brand UUID for tone and glossary context")
 
     model_config = {
         "json_schema_extra": {
@@ -129,7 +132,8 @@ class BucketTranslationRequest(BaseModel):
                     "source_prefix": "content/en/",
                     "target_prefix": "content/ar/",
                     "source_lang": "en",
-                    "target_lang": "ar"
+                    "target_lang": "ar",
+                    "brand_uuid": "123e4567-e89b-12d3-a456-426614174000"
                 }
             ]
         }

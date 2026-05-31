@@ -1,11 +1,3 @@
-"""
-Translation controller — thin orchestrator that delegates to entity services.
-
-No direct repository access. All DB operations go through:
-    - TranslationService (translations entity)
-    - BrandService (brands entity)
-"""
-
 import time
 import logging
 import os
@@ -129,6 +121,15 @@ async def translate_text_controller(
             limit=3,
         )
 
+    import re
+    original_text = text
+    brand_name = brand_context.get("name") if brand_context else None
+    placeholder = "{{BRAND_NAME}}"
+    
+    if brand_name:
+        pattern = re.compile(rf"\b{re.escape(brand_name)}\b", re.IGNORECASE)
+        text = pattern.sub(placeholder, text)
+
     try:
         translation_text = await translate(
             text,
@@ -139,9 +140,16 @@ async def translate_text_controller(
             domain_rules,
             similar_examples=similar_examples,
         )
+        
+        if brand_name:
+            translation_text = translation_text.replace(placeholder, brand_name)
+            
+        text = original_text
+            
         is_successed = True
         notes = None
     except NotImplementedError as e:
+        text = original_text
         translation_time = time.time() - start_time
         await translation_svc.create(
             value=text,
@@ -159,6 +167,7 @@ async def translate_text_controller(
         )
         return {"error": str(e), "complexity_score": complexity_score}
     except Exception as e:
+        text = original_text
         translation_text = None
         is_successed = False
         notes = str(e)

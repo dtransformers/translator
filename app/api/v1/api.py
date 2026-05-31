@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import translation, brands, domains, review, debug
+from app.api.v1.endpoints import translation, brands, review, debug
+from app.domains import controller as domains
 
 api_router = APIRouter()
 
