@@ -227,18 +227,15 @@ async def translate_document_controller(
     target_lang = payload.target_lang
     document_url = payload.document_url
 
-    # 1. Check supported languages
     if not is_in_supported_languages(source_lang, target_lang):
         return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-    # 2. Extract filename from URL
     try:
         parsed_url = urlparse(document_url)
         filename = os.path.basename(parsed_url.path) or "document.json"
     except Exception:
         filename = "document.json"
 
-    # 3. Fetch file content
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(document_url)
@@ -249,14 +246,12 @@ async def translate_document_controller(
         except ValueError as e:
             return {"error": f"Document is not valid JSON: {str(e)}"}
 
-    # 4. Parse JSON to AST
     try:
         root_node = json_to_ast(doc_data)
         doc_node = DocumentNode(root_node, "json")
     except Exception as e:
         return {"error": f"Failed to parse document to AST: {str(e)}"}
 
-    # 5. Collect and translate translatable segments
     translatable_nodes = collect_translatable_nodes(doc_node)
     
     for node in translatable_nodes:
