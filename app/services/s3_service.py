@@ -55,7 +55,6 @@ class S3Service:
             raise
 
     def upload_json(self, bucket_name: str, key: str, data: Dict[str, Any]) -> None:
-        """Upload a JSON object to the bucket."""
         try:
             content = json.dumps(data, ensure_ascii=False, indent=2)
             self.s3_client.put_object(
@@ -66,4 +65,15 @@ class S3Service:
             )
         except ClientError as e:
             logger.error(f"Error uploading {key} to {bucket_name}: {e}")
+            raise
+
+    def copy_object(self, source_bucket: str, source_key: str, dest_bucket: str, dest_key: str) -> None:
+        try:
+            self.s3_client.copy_object(
+                Bucket=dest_bucket,
+                Key=dest_key,
+                CopySource={'Bucket': source_bucket, 'Key': source_key}
+            )
+        except ClientError as e:
+            logger.error(f"Error copying {source_key} to {dest_key}: {e}")
             raise

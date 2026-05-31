@@ -53,34 +53,57 @@ async def process_s3_file(
     try:
         # Check cache
         async with async_session() as db:
-            stmt = select(FileTranslationOperation).where(
+            stmt = select(FileTranslationOperation, BucketTranslationOperation).join(
+                BucketTranslationOperation,
+                FileTranslationOperation.bucket_operation_id == BucketTranslationOperation.id
+            ).where(
                 FileTranslationOperation.file_key == source_key,
                 FileTranslationOperation.file_hash == file_hash,
-                FileTranslationOperation.status == "SUCCESS"
+                FileTranslationOperation.status == "SUCCESS",
+                BucketTranslationOperation.target_lang == target_lang
             )
             result = await db.execute(stmt)
-            cached_file = result.scalars().first()
+            cached_record = result.first()
             
-            if cached_file:
-                # File already processed successfully with the same hash
+            if cached_record:
+                cached_file, cached_bucket_op = cached_record
                 logger.info(f"Skipping {source_key} due to cache hit (hash: {file_hash}).")
-                # We update the current file operation to SKIPPED
-                await db.execute(
-                    update(FileTranslationOperation)
-                    .where(FileTranslationOperation.id == file_id)
-                    .values(status="SKIPPED")
-                )
-                await db.commit()
-                # Update bucket operation skipped count
-                await db.execute(
-                    update(BucketTranslationOperation)
-                    .where(BucketTranslationOperation.id == operation_id)
-                    .values(skipped_files=BucketTranslationOperation.skipped_files + 1)
-                )
-                await db.commit()
-                return
-
-        # If not cached, continue with translation
+                
+                # We need to copy the object from its old target location to the new one
+                if source_key.startswith(cached_bucket_op.source_prefix):
+                    old_target_key = cached_bucket_op.target_prefix + source_key[len(cached_bucket_op.source_prefix):]
+                else:
+                    old_target_key = cached_bucket_op.target_prefix + source_key
+                    
+                try:
+                    await asyncio.to_thread(
+                        s3_service.copy_object,
+                        cached_bucket_op.bucket_name,
+                        old_target_key,
+                        bucket_name,
+                        target_key
+                    )
+                    
+                    # If copy succeeds, update the current file operation to SKIPPED
+                    await db.execute(
+                        update(FileTranslationOperation)
+                        .where(FileTranslationOperation.id == file_id)
+                        .values(status="SKIPPED")
+                    )
+                    await db.commit()
+                    # Update bucket operation skipped count
+                    await db.execute(
+                        update(BucketTranslationOperation)
+                        .where(BucketTranslationOperation.id == operation_id)
+                        .values(skipped_files=BucketTranslationOperation.skipped_files + 1)
+                    )
+                    await db.commit()
+                    return
+                except Exception as copy_err:
+                    logger.warning(f"Cache hit but failed to copy {old_target_key} to {target_key} (maybe deleted?). Falling back to translation. Error: {copy_err}")
+                    # We just log it and fall through to normal translation process.
+                    
+        # If not cached or if cache copy failed, continue with translation
         doc_data = await asyncio.to_thread(s3_service.download_json, bucket_name, source_key)
         
         root_node = json_to_ast(doc_data)
