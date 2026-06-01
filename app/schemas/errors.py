@@ -1,13 +1,9 @@
-"""
-Standardized error response schemas for Swagger/OpenAPI documentation.
-"""
 
 from pydantic import BaseModel, Field
 from typing import Optional
 
 
 class ErrorResponse(BaseModel):
-    """Standard error response wrapper returned by all endpoints on failure."""
 
     success: bool = Field(False, description="Always false for error responses")
     data: None = Field(None, description="Always null for error responses")
@@ -25,10 +21,6 @@ class ErrorResponse(BaseModel):
         }
     }
 
-
-# --------------------------------------------------------------------- #
-#  Reusable response dicts for endpoint `responses` parameter
-# --------------------------------------------------------------------- #
 
 ERROR_400: dict = {
     400: {
