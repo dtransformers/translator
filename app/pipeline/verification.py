@@ -62,18 +62,11 @@ def is_translatable(text: str) -> bool:
 
 
 def is_source_target_compatible(text: str, source_lang: str) -> dict:
-    """
-    Step 2: IsTheInputSourceTargetCompatible
-    Detects the actual language of the text and checks if it matches
-    the declared source language.
-    Returns a dict with 'compatible' (bool) and 'detected_lang' (str or None).
-    """
     try:
         detected = detect(text)
     except LangDetectException:
         return {"compatible": False, "detected_lang": None}
 
-    # langdetect returns 'zh-cn', 'zh-tw' for Chinese — normalise to 'zh'
     if detected.startswith("zh"):
         detected = "zh"
 
@@ -82,13 +75,8 @@ def is_source_target_compatible(text: str, source_lang: str) -> dict:
         "detected_lang": detected
     }
 
-
 def is_in_supported_languages(source_lang: str, target_lang: str) -> bool:
-    """
-    Step 3: IsTheInputInSupportedLanguages
-    Validates the requested source and target are in our supported set and
-    that the directional pair exists.
-    """
+
     if source_lang not in SUPPORTED_LANGUAGES:
         return False
     if target_lang not in SUPPORTED_LANGUAGES:

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 _tokenizer = None
 _model = None
 
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MODEL_NAME = "intfloat/multilingual-e5-large"
 
 def _get_model():
     global _tokenizer, _model
@@ -30,8 +30,11 @@ def _mean_pooling(model_output, attention_mask):
 
 def score_translation(source: str, translation: str) -> float:
     tokenizer, model = _get_model()
+    if tokenizer is None or model is None:
+        raise RuntimeError("Quality estimation model or tokenizer not loaded.")
+        
     encoded = tokenizer(
-        [source, translation],
+        [f"query: {source}", f"query: {translation}"],
         padding=True,
         truncation=True,
         max_length=512,

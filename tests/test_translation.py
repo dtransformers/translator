@@ -20,7 +20,7 @@ async def test_translate_text_missing_fields(client: AsyncClient):
 async def test_translate_text_untranslatable(client: AsyncClient, mocker):
     # Mock the TranslationService.create to avoid real DB queries
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.create",
+        "app.text_translation.controller.TranslationService.create",
         new_callable=AsyncMock,
     )
 
@@ -57,36 +57,36 @@ async def test_translate_text_with_domain(client: AsyncClient, mocker):
     )
 
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.find_cached",
+        "app.text_translation.controller.TranslationService.find_cached",
         new_callable=AsyncMock,
         return_value=None,
     )
     mocker.patch(
-        "app.controllers.translation_controller.BrandService.get_brand_context",
+        "app.text_translation.controller.BrandService.get_brand_context",
         new_callable=AsyncMock,
         return_value={},
     )
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.build_glossary_from_units",
+        "app.text_translation.controller.TranslationService.build_glossary_from_units",
         new_callable=AsyncMock,
         return_value={},
     )
     mocker.patch(
-        "app.controllers.translation_controller.DomainService.get_by_name",
+        "app.text_translation.controller.DomainService.get_by_name",
         new_callable=AsyncMock,
         return_value=mock_domain,
     )
     mocker.patch(
-        "app.controllers.translation_controller.translate",
+        "app.text_translation.controller.translate",
         new_callable=AsyncMock,
         return_value="Save",
     )
     mocker.patch(
-        "app.controllers.translation_controller.score_translation",
+        "app.text_translation.controller.score_translation",
         return_value=0.95,
     )
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.save_with_cache_fields",
+        "app.text_translation.controller.TranslationService.save_with_cache_fields",
         new_callable=AsyncMock,
     )
 

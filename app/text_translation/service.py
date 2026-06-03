@@ -1,62 +1,35 @@
-"""
-TranslationService — the single public interface for all Translation entity operations.
-
-External modules (controllers, pipeline, endpoints) must use this service.
-Never import TranslationRepository directly outside this module.
-"""
-
 import hashlib
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import or_
 
-from app.translations.models import Translation, ReusableUnit
-from app.translations.repository import TranslationRepository
+from app.text_translation.models import Translation, ReusableUnit
+from app.text_translation.repository import TranslationRepository, ReusableUnitRepository
 from app.pipeline.normalization import canonicalize_text, abstract_entities, semantic_fingerprint
 from app.pipeline.embeddings import get_embedding
 
 logger = logging.getLogger(__name__)
 
-
 class TranslationService:
-    """
-    Service layer for the Translation entity.
-
-    Encapsulates all CRUD, caching, and reusable-unit operations.
-    The repository is internal — only this service may call it.
-    """
-
     def __init__(self, db: AsyncSession):
         self._repo = TranslationRepository(db)
         self._db = db
 
-    # ------------------------------------------------------------------ #
-    #  CRUD
-    # ------------------------------------------------------------------ #
-
     async def create(self, **kwargs) -> Translation:
-        """Create a new translation record."""
-        return await self._repo.create_translation(**kwargs)
+        return await self._repo.create(**kwargs)
 
     async def get_by_id(self, translation_id: int) -> Translation | None:
-        """Get a single translation by primary key."""
-        return await self._repo.get_translation_by_id(translation_id)
+        return await self._repo.get_by_id(translation_id)
 
     async def get_all(self, skip: int = 0, limit: int = 100) -> list[Translation]:
-        """Get a paginated list of translations."""
-        return await self._repo.get_all_translations(skip=skip, limit=limit)
+        return await self._repo.get_all(skip=skip, limit=limit)
 
     async def update(self, translation_id: int, **kwargs) -> Translation | None:
-        """Update an existing translation record."""
-        return await self._repo.update_translation(translation_id, **kwargs)
-
-    # ------------------------------------------------------------------ #
-    #  Multi-tier Cache Lookup
-    # ------------------------------------------------------------------ #
+        return await self._repo.update(translation_id, **kwargs)
 
     async def find_cached(
         self,
@@ -171,9 +144,7 @@ class TranslationService:
 
         return None
 
-
     async def save_with_cache_fields(self, **kwargs) -> Translation:
-
         text = kwargs.get("value")
         source_lang = kwargs.get("language")
 
@@ -193,71 +164,7 @@ class TranslationService:
             kwargs["normalized_hash"] = norm_hash
             kwargs["embedding"] = emb
 
-        return await self._repo.create_translation(**kwargs)
-
-
-
-    async def create_reusable_unit(
-        self,
-        source_text: str,
-        target_language: str,
-        translation: str,
-        unit_type: str,
-    ) -> ReusableUnit:
-        unit = ReusableUnit(
-            source_text=source_text,
-            target_language=target_language,
-            translation=translation,
-            unit_type=unit_type,
-        )
-        self._db.add(unit)
-        await self._db.commit()
-        await self._db.refresh(unit)
-        return unit
-
-    async def find_reusable_units(
-        self,
-        source_text: str,
-        target_language: str,
-    ) -> list[ReusableUnit]:
-
-        query = select(ReusableUnit).where(
-            ReusableUnit.target_language == target_language,
-        )
-        result = await self._db.execute(query)
-        all_units = result.scalars().all()
-
-        return [u for u in all_units if u.source_text.lower() in source_text.lower()]
-
-    async def get_all_reusable_units(
-        self,
-        target_language: str | None = None,
-    ) -> list[ReusableUnit]:
-        query = select(ReusableUnit)
-        if target_language:
-            query = query.where(ReusableUnit.target_language == target_language)
-        result = await self._db.execute(query)
-        return list(result.scalars().all())
-
-    async def delete_reusable_unit(self, unit_id: int) -> bool:
-        result = await self._db.execute(
-            select(ReusableUnit).where(ReusableUnit.id == unit_id)
-        )
-        unit = result.scalars().first()
-        if not unit:
-            return False
-        await self._db.delete(unit)
-        await self._db.commit()
-        return True
-
-    async def build_glossary_from_units(
-        self,
-        source_text: str,
-        target_language: str,
-    ) -> dict[str, str]:
-
-        units = await self.find_reusable_units(source_text, target_language)
-        return {u.source_text: u.translation for u in units}
+        return await self._repo.create(**kwargs)
 
     async def retrieve_similar_translations(
         self,
@@ -306,3 +213,52 @@ class TranslationService:
         except Exception as e:
             logger.warning("RAG retrieval failed: %s", e)
             return []
+
+
+class ReusableUnitService:
+    def __init__(self, db: AsyncSession):
+        self._repo = ReusableUnitRepository(db)
+        self._db = db
+
+    async def create(
+        self,
+        source_text: str,
+        target_language: str,
+        translation: str,
+        unit_type: str,
+    ) -> ReusableUnit:
+        return await self._repo.create(
+            source_text=source_text,
+            target_language=target_language,
+            translation=translation,
+            unit_type=unit_type
+        )
+
+    async def find_reusable_units(
+        self,
+        source_text: str,
+        target_language: str,
+    ) -> list[ReusableUnit]:
+        all_units = await self._repo.list_by_target_language(target_language)
+        return [u for u in all_units if u.source_text.lower() in source_text.lower()]
+
+    async def get_all_reusable_units(
+        self,
+        target_language: str | None = None,
+    ) -> list[ReusableUnit]:
+        return await self._repo.list_by_target_language(target_language)
+
+    async def delete_reusable_unit(self, unit_id: int) -> bool:
+        unit = await self._repo.get_by_id(unit_id)
+        if not unit:
+            return False
+        await self._repo.delete(unit)
+        return True
+
+    async def build_glossary_from_units(
+        self,
+        source_text: str,
+        target_language: str,
+    ) -> dict[str, str]:
+        units = await self.find_reusable_units(source_text, target_language)
+        return {cast(str, u.source_text): cast(str, u.translation) for u in units}

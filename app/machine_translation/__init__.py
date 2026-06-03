@@ -1,6 +1,6 @@
-from .marian_service import MarianMTService
+from .nllb_service import NLLBService
 from app.core.config import settings
 
-marian_mt_service = MarianMTService()
+nllb_service = NLLBService()
 
-__all__ = ["MarianMTService", "marian_mt_service"]
+__all__ = ["NLLBService", "nllb_service"]

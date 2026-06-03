@@ -47,6 +47,13 @@ class ValueNode(ASTNode):
     def to_dict(self) -> Any:
         return self.value
 
+def _is_icon_path(path: str) -> bool:
+    """Helper to check if the path points to an icon or icons property."""
+    if not path:
+        return False
+    last_key = path.split(".")[-1].split("[")[0].lower()
+    return last_key in ("icon", "icons")
+
 def json_to_ast(data: Any, path: str = "") -> ASTNode:
     """Recursively parse JSON data (dicts/lists/primitives) into an AST structure."""
     if isinstance(data, dict):
@@ -62,12 +69,7 @@ def json_to_ast(data: Any, path: str = "") -> ASTNode:
             elements.append(json_to_ast(item, child_path))
         return ArrayNode(elements)
     elif isinstance(data, str):
-        is_trans = is_translatable(data)
-        # Skip translation if the path indicates it's an icon or icons property
-        if path:
-            last_key = path.split(".")[-1].split("[")[0].lower()
-            if last_key in ("icon", "icons"):
-                is_trans = False
+        is_trans = is_translatable(data) and not _is_icon_path(path)
         return TextNode(value=data, path=path, is_translatable=is_trans)
     else:
         return ValueNode(data)
@@ -83,7 +85,6 @@ def collect_translatable_nodes(node: ASTNode) -> List[TextNode]:
     elif isinstance(node, ArrayNode):
         for child in node.elements:
             nodes.extend(collect_translatable_nodes(child))
-    elif isinstance(node, TextNode):
-        if node.is_translatable:
-            nodes.append(node)
+    elif isinstance(node, TextNode) and node.is_translatable:
+        nodes.append(node)
     return nodes
