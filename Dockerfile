@@ -37,6 +37,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy the application code with ownership
 COPY --chown=appuser:appgroup . .
 
+# Make sure no write permissions are assigned to the copied resources
+RUN chmod -R a-w /app /opt/venv
+
 # Switch to the non-root user
 USER appuser
 
