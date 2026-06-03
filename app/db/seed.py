@@ -14,7 +14,7 @@ from sqlalchemy.future import select
 from app.db.session import async_session, init_db
 from app.domains.models import Domain
 from app.brands.models import Brand
-from app.translations.models import Translation, ReusableUnit
+from app.text_translation.models import Translation, ReusableUnit
 from app.pipeline.normalization import abstract_entities, canonicalize_text, semantic_fingerprint
 from app.pipeline.embeddings import get_embedding
 

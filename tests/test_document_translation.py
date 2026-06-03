@@ -1,3 +1,4 @@
+from torch.distributed._tools import memory_tracker
 import pytest
 from httpx import AsyncClient, HTTPStatusError, Request, Response
 from unittest.mock import AsyncMock, patch
@@ -8,8 +9,8 @@ from app.pipeline.document import (
     DocumentNode,
     TextNode,
 )
-from app.controllers.translation_controller import translate_document_controller
-from app.schemas.translation import DocumentTranslationRequest
+from app.document_translation.controller import translate_document_controller
+from app.document_translation.schemas import DocumentTranslationRequest
 
 
 def test_json_to_ast_and_back():
@@ -91,19 +92,21 @@ async def test_translate_document_controller_success(mocker):
     mock_response = Response(200, json=document_data)
     mocker.patch("httpx.AsyncClient.get", return_value=mock_response)
 
-    # Mock translate_text_controller
-    async def mock_translate_text(payload, db, brand_uuid, domain_name, filename, property_name):
+    async def mock_translate_text(payload, brand_uuid, domain_name, filename, property_name):
+        import asyncio
+        await asyncio.sleep(0)
         return {"translation": f"ES_{payload.text}"}
 
     mocker.patch(
-        "app.controllers.translation_controller.translate_text_controller",
+        "app.document_translation.controller.TextTranslationController.translate_text",
         side_effect=mock_translate_text
     )
 
     request_payload = DocumentTranslationRequest(
         document_url="https://example.com/sample.json",
         source_lang="en",
-        target_lang="es"
+        target_lang="es",
+        brand_uuid=None
     )
 
     result = await translate_document_controller(
@@ -127,7 +130,8 @@ async def test_translate_document_controller_unsupported_languages(mocker):
     request_payload = DocumentTranslationRequest(
         document_url="https://example.com/sample.json",
         source_lang="en",
-        target_lang="jp"  # Japanese is unsupported
+        target_lang="jp",
+        brand_uuid=None
     )
 
     result = await translate_document_controller(
@@ -151,7 +155,8 @@ async def test_translate_document_controller_http_failure(mocker):
     request_payload = DocumentTranslationRequest(
         document_url="https://example.com/notfound.json",
         source_lang="en",
-        target_lang="es"
+        target_lang="es",
+        brand_uuid=None
     )
 
     result = await translate_document_controller(
@@ -173,9 +178,9 @@ async def test_translate_document_endpoint_integration(client: AsyncClient, mock
     mock_response = Response(200, json=document_data)
     mocker.patch("httpx.AsyncClient.get", return_value=mock_response)
 
-    # Mock translate_text_controller
+    # Mock TextTranslationController.translate_text
     mocker.patch(
-        "app.controllers.translation_controller.translate_text_controller",
+        "app.document_translation.controller.TextTranslationController.translate_text",
         return_value={"translation": "Hola"}
     )
 
@@ -196,9 +201,9 @@ async def test_translate_document_endpoint_integration(client: AsyncClient, mock
 
 @pytest.mark.asyncio
 async def test_translate_text_controller_cache_hit_fields(mocker):
-    from app.translations.models import Translation
-    from app.schemas.translation import TranslationRequest
-    from app.controllers.translation_controller import translate_text_controller
+    from app.text_translation.models import Translation
+    from app.text_translation.schemas import TranslationRequest
+    from app.text_translation.controller import translate_text_controller
 
     db_mock = AsyncMock()
     mock_translation = Translation(
@@ -209,7 +214,7 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
     )
 
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.find_cached",
+        "app.text_translation.controller.TranslationService.find_cached",
         return_value=mock_translation
     )
 
@@ -229,15 +234,15 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
 
 @pytest.mark.asyncio
 async def test_translate_text_controller_llm_rag_lookup(mocker):
-    from app.translations.models import Translation
-    from app.schemas.translation import TranslationRequest
-    from app.controllers.translation_controller import translate_text_controller
+    from app.text_translation.models import Translation
+    from app.text_translation.schemas import TranslationRequest
+    from app.text_translation.controller import translate_text_controller
 
     db_mock = AsyncMock()
     
     # 1. No cache hit
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.find_cached",
+        "app.text_translation.controller.TranslationService.find_cached",
         return_value=None
     )
 
@@ -247,37 +252,37 @@ async def test_translate_text_controller_llm_rag_lookup(mocker):
         translation="¡Hola mundo!"
     )
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.retrieve_similar_translations",
+        "app.text_translation.controller.TranslationService.retrieve_similar_translations",
         return_value=[similar_record]
     )
 
     # 3. Mock other services
     mocker.patch(
-        "app.controllers.translation_controller.BrandService.get_brand_context",
+        "app.text_translation.controller.BrandService.get_brand_context",
         return_value={}
     )
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.build_glossary_from_units",
+        "app.text_translation.controller.TranslationService.build_glossary_from_units",
         return_value={}
     )
     mocker.patch(
-        "app.controllers.translation_controller.TranslationService.save_with_cache_fields"
+        "app.text_translation.controller.TranslationService.save_with_cache_fields"
     )
     mocker.patch(
-        "app.controllers.translation_controller.score_translation",
+        "app.text_translation.controller.score_translation",
         return_value=0.9
     )
 
     # Mock the translate function to check similar_examples argument
     mock_translate = AsyncMock(return_value="Hola mundito")
     mocker.patch(
-        "app.controllers.translation_controller.translate",
+        "app.text_translation.controller.translate",
         new=mock_translate
     )
 
     # Ensure complexity triggers LLM (>= 50)
     mocker.patch(
-        "app.controllers.translation_controller.calculate_complexity_score",
+        "app.text_translation.controller.calculate_complexity_score",
         return_value=60
     )
 
@@ -301,7 +306,7 @@ async def test_translate_text_controller_llm_rag_lookup(mocker):
 
 @pytest.mark.asyncio
 async def test_retrieve_rag_examples(mocker):
-    from app.translations.models import Translation
+    from app.text_translation.models import Translation
     from app.llms.rag import retrieve_rag_examples
 
     translation_svc_mock = AsyncMock()

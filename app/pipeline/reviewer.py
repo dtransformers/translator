@@ -10,7 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
 
-from app.translations.models import Translation
+from app.text_translation.models import Translation
 from app.pipeline.complexity import calculate_complexity_score
 from app.pipeline.quality import score_translation
 from app.llms.model import get_llm

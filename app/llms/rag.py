@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from app.translations.service import TranslationService
+    from app.text_translation.service import TranslationService
 
 logger = logging.getLogger(__name__)
 

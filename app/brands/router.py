@@ -6,17 +6,17 @@ Full CRUD for Brand entities used to inject context into translations.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Annotated
 
 from app.db.session import get_db
 from app.core.auth import require_auth
-from app.brands.service import BrandService
+from app.brands.controller import BrandController
 from app.brands.schemas import BrandCreate, BrandUpdate, BrandResponse
-from app.schemas.translation import ApiResponse
+from app.schemas.base import ApiResponse
 from app.schemas.errors import CRUD_ERRORS, COMMON_ERRORS
 
 router = APIRouter(dependencies=[Depends(require_auth)])
-
+errorNotFound = "Brand not found"
 
 @router.post(
     "",
@@ -34,11 +34,11 @@ router = APIRouter(dependencies=[Depends(require_auth)])
 )
 async def create_brand(
     brand_in: BrandCreate,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Create a new brand profile."""
-    svc = BrandService(db)
-    brand = await svc.create(brand_in)
+    ctl = BrandController(db)
+    brand = await ctl.create(brand_in)
     return ApiResponse(
         success=True,
         data=BrandResponse.model_validate(brand),
@@ -55,10 +55,10 @@ async def create_brand(
     operation_id="list_brands",
     responses=COMMON_ERRORS,
 )
-async def get_all_brands(db: AsyncSession = Depends(get_db)):
+async def get_all_brands(db: Annotated[AsyncSession, Depends(get_db)]):
     """List every registered brand."""
-    svc = BrandService(db)
-    brands = await svc.get_all()
+    ctl = BrandController(db)
+    brands = await ctl.get_all()
     return ApiResponse(
         success=True,
         data=[BrandResponse.model_validate(b) for b in brands],
@@ -77,13 +77,12 @@ async def get_all_brands(db: AsyncSession = Depends(get_db)):
 )
 async def get_brand(
     brand_uuid: str,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Fetch a brand by UUID."""
-    svc = BrandService(db)
-    brand = await svc.get_by_uuid(brand_uuid)
+    ctl = BrandController(db)
+    brand = await ctl.get_by_uuid(brand_uuid)
     if not brand:
-        raise HTTPException(status_code=404, detail="Brand not found")
+        raise HTTPException(status_code=404, detail=errorNotFound)
     return ApiResponse(
         success=True,
         data=BrandResponse.model_validate(brand),
@@ -106,13 +105,12 @@ async def get_brand(
 async def update_brand(
     brand_uuid: str,
     brand_in: BrandUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Update a brand by UUID."""
-    svc = BrandService(db)
-    updated = await svc.update(brand_uuid, brand_in)
+    ctl = BrandController(db)
+    updated = await ctl.update(brand_uuid, brand_in)
     if not updated:
-        raise HTTPException(status_code=404, detail="Brand not found")
+        raise HTTPException(status_code=404, detail=errorNotFound)
     return ApiResponse(
         success=True,
         data=BrandResponse.model_validate(updated),
@@ -131,11 +129,10 @@ async def update_brand(
 )
 async def delete_brand(
     brand_uuid: str,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Delete a brand by UUID."""
-    svc = BrandService(db)
-    deleted = await svc.delete(brand_uuid)
+    ctl = BrandController(db)
+    deleted = await ctl.delete(brand_uuid)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Brand not found")
+        raise HTTPException(status_code=404, detail=errorNotFound)
     return ApiResponse(success=True, data=None, error=None)
