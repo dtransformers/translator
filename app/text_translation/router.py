@@ -39,8 +39,8 @@ debug_router = APIRouter(prefix="/debug", tags=["debug"])
 async def translate_text_endpoint(
     payload: TranslationRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    uuid: str | None = Query(None, description="Optional Brand UUID to inject context"),
-    name: str | None = Query(None, description="Optional Domain name to apply rules"),
+    uuid: Annotated[str | None, Query(description="Optional Brand UUID to inject context")] = None,
+    name: Annotated[str | None, Query(description="Optional Domain name to apply rules")] = None,
 ):
     """Translate text between supported language pairs."""
     ctl = TextTranslationController(db)
@@ -80,7 +80,7 @@ async def _run_review_background():
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Background review failed: {e}")
+            logger.exception("Background review failed")
 
 @review_router.post(
     "/start",

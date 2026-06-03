@@ -55,7 +55,7 @@ async def _try_copy_from_cache(
     if not cached_record:
         return False
 
-    cached_file, cached_bucket_op = cached_record
+    _, cached_bucket_op = cached_record
     logger.info(f"Skipping {source_key} due to cache hit (hash: {file_hash}).")
     
     if source_key.startswith(cached_bucket_op.source_prefix):
@@ -104,8 +104,8 @@ async def _translate_segments(
                 node.translated_value = node.value
             else:
                 node.translated_value = res.get("translation", node.value)
-        except Exception as e:
-            logger.error("Error translating segment in %s: %s", source_key, e)
+        except Exception:
+            logger.exception("Error translating segment in %s", source_key)
             node.translated_value = node.value
 
 async def process_s3_file(
@@ -156,7 +156,7 @@ async def process_s3_file(
     except Exception as e:
         import traceback
         from botocore.exceptions import ClientError
-        logger.error("Failed to process file %s: %s", source_key, e)
+        logger.exception("Failed to process file %s", source_key)
         error_message = str(e)
         if isinstance(e, ClientError):
             error_message += f"\nResponse: {e.response}"
@@ -182,11 +182,11 @@ async def background_bucket_translation(operation_id: str, payload: BucketTransl
         files = await asyncio.to_thread(
             s3_service.list_json_files, payload.bucket_name, payload.source_prefix
         )
-    except Exception as e:
+    except Exception:
         async with async_session() as db:
             repo = BucketTranslationRepository(db)
             await repo.update_operation(operation_id, status="FAILED")
-        logger.error(f"Bucket translation {operation_id} failed to list files: {e}")
+        logger.exception("Bucket translation %s failed to list files", operation_id)
         return
 
     async with async_session() as db:

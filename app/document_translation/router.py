@@ -27,8 +27,8 @@ router = APIRouter(dependencies=[Depends(require_auth)])
 async def document_endpoint(
     payload: DocumentTranslationRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    uuid: str | None = Query(None, description="Optional Brand UUID for tone and glossary context"),
-    name: str | None = Query(None, description="Optional Domain name to apply rules"),
+    uuid: Annotated[str | None, Query(description="Optional Brand UUID for tone and glossary context")] = None,
+    name: Annotated[str | None, Query(description="Optional Domain name to apply rules")] = None,
 ):
     """Translate a full document by URL."""
     brand_uuid = payload.brand_uuid or uuid

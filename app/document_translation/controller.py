@@ -76,8 +76,8 @@ class DocumentTranslationController:
                     node.translated_value = node.value
                 else:
                     node.translated_value = res.get("translation", node.value)
-            except Exception as e:
-                logger.error("Error translating segment '%s': %s", node.value[:30], e)
+            except Exception:
+                logger.exception("Error translating segment '%s'", node.value[:30])
                 node.translated_value = node.value
 
         # Reconstitute the document from AST

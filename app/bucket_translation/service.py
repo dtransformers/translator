@@ -35,8 +35,8 @@ class S3Service:
                                 'Size': obj.get('Size', 0),
                                 'ETag': obj.get('ETag', '').strip('"')
                             })
-        except ClientError as e:
-            logger.error(f"Error listing objects in bucket {bucket_name} with prefix {prefix}: {e}")
+        except ClientError:
+            logger.exception("Error listing objects in bucket %s with prefix %s", bucket_name, prefix)
             raise
             
         return files
@@ -47,11 +47,11 @@ class S3Service:
             response = self.s3_client.get_object(Bucket=bucket_name, Key=key)
             content = response['Body'].read().decode('utf-8')
             return json.loads(content)
-        except ClientError as e:
-            logger.error(f"Error downloading {key} from {bucket_name}: {e}")
+        except ClientError:
+            logger.exception("Error downloading %s from %s", key, bucket_name)
             raise
-        except json.JSONDecodeError as e:
-            logger.error(f"Error parsing JSON from {key}: {e}")
+        except json.JSONDecodeError:
+            logger.exception("Error parsing JSON from %s", key)
             raise
 
     def upload_json(self, bucket_name: str, key: str, data: Dict[str, Any]) -> None:
@@ -63,8 +63,8 @@ class S3Service:
                 Body=content.encode('utf-8'),
                 ContentType='application/json'
             )
-        except ClientError as e:
-            logger.error(f"Error uploading {key} to {bucket_name}: {e}")
+        except ClientError:
+            logger.exception("Error uploading %s to %s", key, bucket_name)
             raise
 
     def copy_object(self, source_bucket: str, source_key: str, dest_bucket: str, dest_key: str) -> None:
@@ -74,6 +74,6 @@ class S3Service:
                 Key=dest_key,
                 CopySource={'Bucket': source_bucket, 'Key': source_key}
             )
-        except ClientError as e:
-            logger.error(f"Error copying {source_key} to {dest_key}: {e}")
+        except ClientError:
+            logger.exception("Error copying %s to %s", source_key, dest_key)
             raise
