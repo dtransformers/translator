@@ -53,7 +53,6 @@ async def lifespan(app: FastAPI):
     from app.db.session import engine
     from app.llms.model import get_llm
     
-    # 1. DB Check
     try:
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
@@ -63,7 +62,6 @@ async def lifespan(app: FastAPI):
         health_status["db"] = "error"
         raise RuntimeError(f"DB Startup Check Failed: {e}")
 
-    # 2. Duckling Check
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(settings.DUCKLING_URL, data={"text": "hello", "locale": "en_XX"})
@@ -73,7 +71,6 @@ async def lifespan(app: FastAPI):
         health_status["duckling"] = "error"
         raise RuntimeError(f"Duckling Startup Check Failed: {e}")
 
-    # 3. LLM Check
     try:
         llm = get_llm()
         await llm.ainvoke("ping")
@@ -82,13 +79,25 @@ async def lifespan(app: FastAPI):
         health_status["llm"] = "error"
         raise RuntimeError(f"LLM Startup Check Failed: {e}")
 
-    # 4. Models Preloading
     try:
         await asyncio.to_thread(nllb_service.preload_models)
+        
+        from app.pipeline.embeddings import get_embedding_model
+        await asyncio.to_thread(get_embedding_model)
+        
+        from app.pipeline.quality import _get_model
+        await asyncio.to_thread(_get_model)
+        
+        import nltk
+        try:
+            await asyncio.to_thread(nltk.data.find, 'tokenizers/punkt')
+        except LookupError:
+            await asyncio.to_thread(nltk.download, 'punkt', quiet=True)
+            
         health_status["models"] = "ok"
     except Exception as e:
         health_status["models"] = "error"
-        raise RuntimeError(f"NLLB Models Preloading Failed: {e}")
+        raise RuntimeError(f"Models Preloading Failed: {e}")
 
     yield
 
