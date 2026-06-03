@@ -8,7 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.machine_translation import marian_mt_service
+from app.machine_translation import nllb_service
 from app.db.session import init_db
 
 
@@ -84,11 +84,11 @@ async def lifespan(app: FastAPI):
 
     # 4. Models Preloading
     try:
-        await asyncio.to_thread(marian_mt_service.preload_models)
+        await asyncio.to_thread(nllb_service.preload_models)
         health_status["models"] = "ok"
     except Exception as e:
         health_status["models"] = "error"
-        raise RuntimeError(f"MarianMT Models Preloading Failed: {e}")
+        raise RuntimeError(f"NLLB Models Preloading Failed: {e}")
 
     yield
 
@@ -99,7 +99,7 @@ app = FastAPI(
         "A modular FastAPI application for high-quality, context-aware "
         "translation services.\n\n"
         "## Features\n\n"
-        "- **Multi-engine translation** — MarianMT for simple texts, LLM "
+        "- **Multi-engine translation** — NLLB-200 for simple texts, LLM "
         "(Gemini / Ollama) for complex texts\n"
         "- **Multi-tier semantic caching** — exact → normalized → vector "
         "similarity lookup\n"

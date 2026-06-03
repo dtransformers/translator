@@ -8,6 +8,7 @@ import asyncio
 import logging
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any
 
 from app.translations.models import Translation
 from app.pipeline.complexity import calculate_complexity_score
@@ -18,7 +19,6 @@ from app.llms.prompts import get_fix_translation_prompt
 logger = logging.getLogger(__name__)
 
 async def fix_translation_with_llm(source_text: str, bad_translation: str, target_lang: str) -> str:
-    """Uses the LLM to fix a poorly translated text."""
     try:
         llm = get_llm()
         prompt = get_fix_translation_prompt()
@@ -30,8 +30,15 @@ async def fix_translation_with_llm(source_text: str, bad_translation: str, targe
             "bad_translation": bad_translation
         })
         
-        # Clean up possible markdown wrappers
-        content = response.content.strip()
+        raw_content = response.content
+        if isinstance(raw_content, str):
+            content = raw_content
+        elif isinstance(raw_content, list):
+            content = " ".join(str(item) for item in raw_content)
+        else:
+            content = str(raw_content)
+            
+        content = content.strip()
         if content.startswith('"') and content.endswith('"'):
             content = content[1:-1]
             
@@ -41,14 +48,10 @@ async def fix_translation_with_llm(source_text: str, bad_translation: str, targe
         return bad_translation
 
 async def review_translations_batch(db: AsyncSession) -> dict:
-    """
-    Scans the translations table for items needing review:
-    Condition: trust_score < 0.8 AND complexity_score > 35
-    """
+
     logger.info("Starting batch translation review...")
     
-    # 1. Fetch translations that might need review
-    # We fetch those where trust_score is NULL or < 0.8.
+
     stmt = select(Translation).where(
         Translation.is_successed == True,
     )
@@ -59,7 +62,8 @@ async def review_translations_batch(db: AsyncSession) -> dict:
     reviewed_count = 0
     fixed_count = 0
     
-    for t in translations:
+    for t_raw in translations:
+        t: Any = t_raw
         needs_update = False
         
         if t.complexity_score is None:
@@ -74,7 +78,6 @@ async def review_translations_batch(db: AsyncSession) -> dict:
                     t.trust_score = await asyncio.to_thread(score_translation, t.value, t.translation)
             needs_update = True
             
-        # Review condition: trust_score <= 0.85 and complexity >= 35
         if t.trust_score is not None and t.trust_score <= 0.85 and t.complexity_score >= 35:
             logger.info(f"Reviewing translation ID {t.id} (Trust: {t.trust_score}, Complexity: {t.complexity_score})")
             reviewed_count += 1
@@ -87,12 +90,10 @@ async def review_translations_batch(db: AsyncSession) -> dict:
             
             if fixed_translation and fixed_translation != t.translation:
                 t.translation = fixed_translation
-                # Rescore the fixed translation
                 new_trust_score = await asyncio.to_thread(score_translation, t.value, t.translation)
                 t.trust_score = new_trust_score
-                # Also update legacy score
                 t.score = new_trust_score
-                t.is_verified = True  # Mark as verified by LLM
+                t.is_verified = True  
                 needs_update = True
                 fixed_count += 1
                 

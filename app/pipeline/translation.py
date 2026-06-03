@@ -1,12 +1,9 @@
-"""
-Translation pipeline — routing logic between MarianMT and LLM.
-"""
 
 import json
 import logging
 from typing import Any
 
-from app.machine_translation import marian_mt_service
+from app.machine_translation import nllb_service
 from app.llms.model import get_llm
 from app.llms.prompts import get_translation_draft_prompt
 from app.core.config import settings
@@ -22,7 +19,6 @@ async def translate_with_llm(
     domain_rules: dict[str, Any] | None = None,
     similar_examples: list[dict] | None = None,
 ) -> str:
-    """Translate text using the configured LLM, enriched with brand context and RAG examples."""
     logger.info("Using LLM for translation from %s to %s", source_lang, target_lang)
 
     ctx = brand_context or {}
@@ -30,7 +26,6 @@ async def translate_with_llm(
     prompt = get_translation_draft_prompt()
     chain = prompt | llm
 
-    # Format the similar translations RAG context
     if similar_examples:
         rag_str = "\n".join(
             f"- Source: \"{item['source']}\"\n  Translation: \"{item['translation']}\""
@@ -50,15 +45,23 @@ async def translate_with_llm(
         "texts": json.dumps([text]),
     })
 
+    raw_content = response.content
+    if isinstance(raw_content, str):
+        content = raw_content
+    elif isinstance(raw_content, list):
+        content = " ".join(str(item) for item in raw_content)
+    else:
+        content = str(raw_content)
+
     try:
-        content = response.content.replace("```json", "").replace("```", "").strip()
-        translated_list = json.loads(content)
+        content_clean = content.replace("```json", "").replace("```", "").strip()
+        translated_list = json.loads(content_clean)
         if isinstance(translated_list, list) and len(translated_list) > 0:
-            return translated_list[0]
-        return response.content
+            return str(translated_list[0])
+        return content
     except Exception as e:
         logger.error("Failed to parse LLM response: %s", e)
-        return response.content
+        return content
 
 
 async def translate(
@@ -71,7 +74,7 @@ async def translate(
     similar_examples: list[dict] | None = None,
 ) -> str:
     """
-    Route translation to MarianMT (simple texts) or LLM (complex texts).
+    Route translation to NLLB-200 (simple texts) or LLM (complex texts).
 
     Args:
         text: Source text to translate.
@@ -95,9 +98,9 @@ async def translate(
         )
 
     logger.info(
-        "Translating with MarianMT (complexity=%d): %s -> %s",
+        "Translating with NLLB-200 (complexity=%d): %s -> %s",
         complexity_score,
         source_lang,
         target_lang,
     )
-    return await asyncio.to_thread(marian_mt_service.translate_text, text, source_lang, target_lang)
+    return await asyncio.to_thread(nllb_service.translate_text, text, source_lang, target_lang)
