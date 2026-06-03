@@ -9,7 +9,7 @@ from app.brands.models import Brand
 async def test_create_brand(client: AsyncClient, mocker):
     mock_brand = Brand(id=1, uuid="test-uuid-123", name="TestBrand", industry="Tech")
     mocker.patch(
-        "app.api.v1.endpoints.brands.BrandService.create",
+        "app.brands.router.BrandService.create",
         new_callable=AsyncMock,
         return_value=mock_brand,
     )
@@ -30,7 +30,7 @@ async def test_create_brand(client: AsyncClient, mocker):
 async def test_get_brand(client: AsyncClient, mocker):
     mock_brand = Brand(id=1, uuid="test-uuid-123", name="TestBrand", industry="Tech")
     mocker.patch(
-        "app.api.v1.endpoints.brands.BrandService.get_by_uuid",
+        "app.brands.router.BrandService.get_by_uuid",
         new_callable=AsyncMock,
         return_value=mock_brand,
     )
@@ -45,7 +45,7 @@ async def test_get_brand(client: AsyncClient, mocker):
 @pytest.mark.asyncio
 async def test_get_brand_not_found(client: AsyncClient, mocker):
     mocker.patch(
-        "app.api.v1.endpoints.brands.BrandService.get_by_uuid",
+        "app.brands.router.BrandService.get_by_uuid",
         new_callable=AsyncMock,
         return_value=None,
     )

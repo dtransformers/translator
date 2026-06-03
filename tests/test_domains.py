@@ -21,12 +21,12 @@ async def test_create_domain(client: AsyncClient, mocker):
         },
     )
     mocker.patch(
-        "app.domains.controller.DomainService.get_by_name",
+        "app.domains.router.DomainController.get_by_name",
         new_callable=AsyncMock,
         return_value=None,
     )
     mocker.patch(
-        "app.domains.controller.DomainService.create",
+        "app.domains.router.DomainController.create",
         new_callable=AsyncMock,
         return_value=mock_domain,
     )
@@ -64,7 +64,7 @@ async def test_create_domain_already_exists(client: AsyncClient, mocker):
         rules={"creativity": "low"},
     )
     mocker.patch(
-        "app.domains.controller.DomainService.get_by_name",
+        "app.domains.router.DomainController.get_by_name",
         new_callable=AsyncMock,
         return_value=mock_domain,
     )
@@ -102,7 +102,7 @@ async def test_list_domains(client: AsyncClient, mocker):
         ),
     ]
     mocker.patch(
-        "app.domains.controller.DomainService.list_domains",
+        "app.domains.router.DomainController.list_domains",
         new_callable=AsyncMock,
         return_value=mock_domains,
     )
@@ -126,7 +126,7 @@ async def test_get_domain_by_name(client: AsyncClient, mocker):
         rules={"creativity": "low"},
     )
     mocker.patch(
-        "app.domains.controller.DomainService.get_by_name",
+        "app.domains.router.DomainController.get_by_name",
         new_callable=AsyncMock,
         return_value=mock_domain,
     )
@@ -141,7 +141,7 @@ async def test_get_domain_by_name(client: AsyncClient, mocker):
 @pytest.mark.asyncio
 async def test_get_domain_not_found(client: AsyncClient, mocker):
     mocker.patch(
-        "app.domains.controller.DomainService.get_by_name",
+        "app.domains.router.DomainController.get_by_name",
         new_callable=AsyncMock,
         return_value=None,
     )
@@ -163,7 +163,7 @@ async def test_update_domain(client: AsyncClient, mocker):
         rules={"creativity": "very_low"},
     )
     mocker.patch(
-        "app.domains.controller.DomainService.update",
+        "app.domains.router.DomainController.update",
         new_callable=AsyncMock,
         return_value=mock_domain,
     )
@@ -185,7 +185,7 @@ async def test_update_domain(client: AsyncClient, mocker):
 @pytest.mark.asyncio
 async def test_delete_domain(client: AsyncClient, mocker):
     mocker.patch(
-        "app.domains.controller.DomainService.delete",
+        "app.domains.router.DomainController.delete",
         new_callable=AsyncMock,
         return_value=True,
     )

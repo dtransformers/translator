@@ -15,13 +15,13 @@ async def get_db():
         yield session
 
 async def init_db():
-
     import logging
     from app.db.base import Base
     from sqlalchemy import text
 
     from app.brands.models import Brand 
-    from app.translations.models import Translation, ReusableUnit, BucketTranslationOperation, FileTranslationOperation
+    from app.text_translation.models import Translation, ReusableUnit
+    from app.bucket_translation.models import BucketTranslationOperation, FileTranslationOperation
     from app.domains.models import Domain
 
     logger = logging.getLogger(__name__)
