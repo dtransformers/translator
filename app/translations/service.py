@@ -8,7 +8,7 @@ Never import TranslationRepository directly outside this module.
 import hashlib
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -23,23 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 class TranslationService:
-    """
-    Service layer for the Translation entity.
-
-    Encapsulates all CRUD, caching, and reusable-unit operations.
-    The repository is internal — only this service may call it.
-    """
-
     def __init__(self, db: AsyncSession):
         self._repo = TranslationRepository(db)
         self._db = db
 
-    # ------------------------------------------------------------------ #
-    #  CRUD
-    # ------------------------------------------------------------------ #
+
 
     async def create(self, **kwargs) -> Translation:
-        """Create a new translation record."""
         return await self._repo.create_translation(**kwargs)
 
     async def get_by_id(self, translation_id: int) -> Translation | None:
@@ -257,7 +247,7 @@ class TranslationService:
     ) -> dict[str, str]:
 
         units = await self.find_reusable_units(source_text, target_language)
-        return {u.source_text: u.translation for u in units}
+        return {cast(str, u.source_text): cast(str, u.translation) for u in units}
 
     async def retrieve_similar_translations(
         self,
