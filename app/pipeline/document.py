@@ -8,6 +8,17 @@ class ASTNode(ABC):
         """Convert the AST node back to native Python types."""
         pass
 
+    def is_compatible_with(self, other: "ASTNode") -> bool:
+        """Check if this node is structurally compatible with another node."""
+        if type(self) is not type(other):
+            return False
+        return self._check_compatibility(other)
+
+    @abstractmethod
+    def _check_compatibility(self, other: "ASTNode") -> bool:
+        """Type-specific compatibility check."""
+        pass
+
 class DocumentNode(ASTNode):
     def __init__(self, root: ASTNode, format_type: str):
         self.root = root
@@ -16,6 +27,10 @@ class DocumentNode(ASTNode):
     def to_dict(self) -> Any:
         return self.root.to_dict()
 
+    def _check_compatibility(self, other: "ASTNode") -> bool:
+        assert isinstance(other, DocumentNode)
+        return self.format_type == other.format_type and self.root.is_compatible_with(other.root)
+
 class ObjectNode(ASTNode):
     def __init__(self, properties: Dict[str, ASTNode]):
         self.properties = properties
@@ -23,12 +38,24 @@ class ObjectNode(ASTNode):
     def to_dict(self) -> Dict[str, Any]:
         return {k: v.to_dict() for k, v in self.properties.items()}
 
+    def _check_compatibility(self, other: "ASTNode") -> bool:
+        assert isinstance(other, ObjectNode)
+        if set(self.properties.keys()) != set(other.properties.keys()):
+            return False
+        return all(self.properties[k].is_compatible_with(other.properties[k]) for k in self.properties)
+
 class ArrayNode(ASTNode):
     def __init__(self, elements: List[ASTNode]):
         self.elements = elements
 
     def to_dict(self) -> List[Any]:
         return [elem.to_dict() for elem in self.elements]
+
+    def _check_compatibility(self, other: "ASTNode") -> bool:
+        assert isinstance(other, ArrayNode)
+        if len(self.elements) != len(other.elements):
+            return False
+        return all(e1.is_compatible_with(e2) for e1, e2 in zip(self.elements, other.elements))
 
 class TextNode(ASTNode):
     def __init__(self, value: str, path: str, is_translatable: bool = True):
@@ -40,12 +67,20 @@ class TextNode(ASTNode):
     def to_dict(self) -> str:
         return self.translated_value if self.translated_value is not None else self.value
 
+    def _check_compatibility(self, other: "ASTNode") -> bool:
+        assert isinstance(other, TextNode)
+        return self.path == other.path
+
 class ValueNode(ASTNode):
     def __init__(self, value: Any):
         self.value = value
 
     def to_dict(self) -> Any:
         return self.value
+
+    def _check_compatibility(self, other: "ASTNode") -> bool:
+        assert isinstance(other, ValueNode)
+        return type(self.value) is type(other.value)
 
 def _is_icon_path(path: str) -> bool:
     """Helper to check if the path points to an icon or icons property."""
@@ -88,3 +123,7 @@ def collect_translatable_nodes(node: ASTNode) -> List[TextNode]:
     elif isinstance(node, TextNode) and node.is_translatable:
         nodes.append(node)
     return nodes
+
+def is_ast_compatible(node1: ASTNode, node2: ASTNode) -> bool:
+    """Check if two AST nodes have compatible structures."""
+    return node1.is_compatible_with(node2)

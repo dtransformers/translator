@@ -28,7 +28,8 @@ async def client(mock_db_session) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(app=app, base_url="http://test", auth=TEST_AUTH) as ac:
+    from httpx import ASGITransport
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", auth=TEST_AUTH) as ac:
         yield ac
 
     app.dependency_overrides.clear()

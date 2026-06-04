@@ -12,6 +12,7 @@ from app.pipeline import (
     json_to_ast,
     collect_translatable_nodes,
     DocumentNode,
+    is_ast_compatible,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,12 @@ class DocumentTranslationController:
 
         # Reconstitute the document from AST
         translated_document = doc_node.to_dict()
+
+        translated_ast_root = json_to_ast(translated_document)
+        translated_doc_node = DocumentNode(translated_ast_root, "json")
+        
+        if not is_ast_compatible(doc_node, translated_doc_node):
+            return {"error": "Translated document AST is not compatible with the original document AST"}
 
         return {
             "message": "Document translation completed successfully",
