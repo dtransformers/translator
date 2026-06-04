@@ -11,7 +11,7 @@ from app.bucket_translation.schemas import BucketTranslationRequest
 from app.bucket_translation.service import S3Service
 from app.text_translation.controller import TextTranslationController
 from app.text_translation.schemas import TranslationRequest
-from app.pipeline import json_to_ast, collect_translatable_nodes, DocumentNode
+from app.pipeline import json_to_ast, collect_translatable_nodes, DocumentNode, is_ast_compatible
 from app.bucket_translation.models import BucketTranslationOperation, FileTranslationOperation
 from app.bucket_translation.repository import BucketTranslationRepository
 
@@ -149,6 +149,12 @@ async def process_s3_file(
             await _translate_segments(text_ctl, translatable_nodes, source_lang, target_lang, brand_uuid, source_key)
 
         translated_document = doc_node.to_dict()
+        
+        translated_ast_root = json_to_ast(translated_document)
+        translated_doc_node = DocumentNode(translated_ast_root, "json")
+        
+        if not is_ast_compatible(doc_node, translated_doc_node):
+            raise ValueError("Translated document AST is not compatible with the original document AST")
         
         await asyncio.to_thread(s3_service.upload_json, bucket_name, target_key, translated_document)
         status = "SUCCESS"
