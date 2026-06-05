@@ -1,0 +1,14 @@
+{
+  "title": "Welcome to OSoul",
+  "description": "We are glad to have you here.",
+  "items": [
+    {
+      "name": "Apple",
+      "color": "Red"
+    },
+    {
+      "name": "Banana",
+      "color": "Yellow"
+    }
+  ]
+}
