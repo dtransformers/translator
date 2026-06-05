@@ -17,6 +17,7 @@ from .document import (
     ValueNode,
     json_to_ast,
     collect_translatable_nodes,
+    is_ast_compatible,
 )
 
 __all__ = [
@@ -36,5 +37,5 @@ __all__ = [
     "ValueNode",
     "json_to_ast",
     "collect_translatable_nodes",
+    "is_ast_compatible",
 ]
-

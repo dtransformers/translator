@@ -88,8 +88,8 @@ async def test_translate_document_controller_success(mocker):
         }
     }
     
-    # Mock httpx GET
-    mock_response = Response(200, json=document_data)
+    request = Request("GET", "https://example.com/sample.json")
+    mock_response = Response(200, json=document_data, request=request)
     mocker.patch("httpx.AsyncClient.get", return_value=mock_response)
 
     async def mock_translate_text(payload, brand_uuid, domain_name, filename, property_name):
@@ -174,8 +174,8 @@ async def test_translate_document_endpoint_integration(client: AsyncClient, mock
         "hello": "Hello"
     }
     
-    # Mock GET response
-    mock_response = Response(200, json=document_data)
+    request = Request("GET", "https://example.com/doc.json")
+    mock_response = Response(200, json=document_data, request=request)
     mocker.patch("httpx.AsyncClient.get", return_value=mock_response)
 
     # Mock TextTranslationController.translate_text
@@ -210,6 +210,7 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
         value="Hello world",
         translation="Hola mundo",
         score=0.95,
+        trust_score=0.95,
         detected_input_lang="en"
     )
 
@@ -262,7 +263,7 @@ async def test_translate_text_controller_llm_rag_lookup(mocker):
         return_value={}
     )
     mocker.patch(
-        "app.text_translation.controller.TranslationService.build_glossary_from_units",
+        "app.text_translation.controller.ReusableUnitService.build_glossary_from_units",
         return_value={}
     )
     mocker.patch(

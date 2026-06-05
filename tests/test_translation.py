@@ -67,7 +67,7 @@ async def test_translate_text_with_domain(client: AsyncClient, mocker):
         return_value={},
     )
     mocker.patch(
-        "app.text_translation.controller.TranslationService.build_glossary_from_units",
+        "app.text_translation.controller.ReusableUnitService.build_glossary_from_units",
         new_callable=AsyncMock,
         return_value={},
     )

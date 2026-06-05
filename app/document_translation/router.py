@@ -30,7 +30,6 @@ async def document_endpoint(
     uuid: Annotated[str | None, Query(description="Optional Brand UUID for tone and glossary context")] = None,
     name: Annotated[str | None, Query(description="Optional Domain name to apply rules")] = None,
 ):
-    """Translate a full document by URL."""
     brand_uuid = payload.brand_uuid or uuid
     ctl = DocumentTranslationController(db)
     result = await ctl.translate_document(payload, brand_uuid=brand_uuid, domain_name=name)
