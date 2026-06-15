@@ -7,6 +7,7 @@ Usage:
     translator --help
 """
 
+import aiofiles
 import asyncio
 import json
 import logging
@@ -18,9 +19,7 @@ from typing import Optional
 
 import typer
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — ensure `app` package is importable from the scripts dir
-# ---------------------------------------------------------------------------
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.db.session import async_session, init_db, engine
@@ -42,10 +41,6 @@ app = typer.Typer(
 )
 
 
-# ===================================================================== #
-#  init command — warm up DB, models, and LLM so translate is instant
-# ===================================================================== #
-
 async def _async_init():
     """Pre-load every heavy resource the pipeline needs."""
     from sqlalchemy import text as sa_text
@@ -61,7 +56,6 @@ async def _async_init():
     ]
 
     with typer.progressbar(length=len(steps), label="Warming up") as progress:
-        # 1. Database ---------------------------------------------------
         try:
             await init_db()
             async with engine.begin() as conn:
@@ -71,7 +65,6 @@ async def _async_init():
             typer.secho(f"  ✗ Database: {e}", fg=typer.colors.RED)
         progress.update(1)
 
-        # 2. Duckling ---------------------------------------------------
         try:
             import httpx
             from app.core.config import settings
@@ -87,7 +80,6 @@ async def _async_init():
             typer.secho(f"  ✗ Duckling: {e}", fg=typer.colors.YELLOW)
         progress.update(1)
 
-        # 3. LLM -------------------------------------------------------
         try:
             from app.llms.model import get_llm
 
@@ -98,7 +90,6 @@ async def _async_init():
             typer.secho(f"  ✗ LLM: {e}", fg=typer.colors.YELLOW)
         progress.update(1)
 
-        # 4. NLLB models -----------------------------------------------
         try:
             from app.machine_translation import nllb_service
 
@@ -108,7 +99,6 @@ async def _async_init():
             typer.secho(f"  ✗ NLLB models: {e}", fg=typer.colors.YELLOW)
         progress.update(1)
 
-        # 5. Embedding model -------------------------------------------
         try:
             from app.pipeline.embeddings import get_embedding_model
 
@@ -118,7 +108,6 @@ async def _async_init():
             typer.secho(f"  ✗ Embedding model: {e}", fg=typer.colors.YELLOW)
         progress.update(1)
 
-        # 6. Quality model ---------------------------------------------
         try:
             from app.pipeline.quality import _get_model
 
@@ -128,7 +117,6 @@ async def _async_init():
             typer.secho(f"  ✗ Quality model: {e}", fg=typer.colors.YELLOW)
         progress.update(1)
 
-        # 7. NLTK tokenizer --------------------------------------------
         try:
             import nltk
 
@@ -161,10 +149,6 @@ def init():
     )
 
 
-# ===================================================================== #
-#  translate command — the core JSON translation workflow
-# ===================================================================== #
-
 async def _async_translate(
     input_file: Path,
     output_file: Path,
@@ -178,8 +162,9 @@ async def _async_translate(
         await init_db()
 
         # Load source JSON
-        with open(input_file, "r", encoding="utf-8") as f:
-            doc_data = json.load(f)
+        async with aiofiles.open(input_file, "r", encoding="utf-8") as f:
+            content = await f.read()
+            doc_data = json.loads(content)
 
         # Parse AST
         root_node = json_to_ast(doc_data)
@@ -248,8 +233,8 @@ async def _async_translate(
 
         # Write output
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(translated_document, f, ensure_ascii=False, indent=2)
+        async with aiofiles.open(output_file, "w", encoding="utf-8") as f:
+            await f.write(json.dumps(translated_document, ensure_ascii=False, indent=2))
 
         typer.secho(
             f"✅ Successfully translated → {output_file}",

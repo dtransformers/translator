@@ -14,7 +14,7 @@ def get_embedding_model():
             _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
             logger.info("Model loaded successfully.")
         except ImportError:
-            logger.error("sentence-transformers is not installed.")
+            logger.exception("sentence-transformers is not installed.")
             raise
     return _embedding_model
 

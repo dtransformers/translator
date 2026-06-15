@@ -7,9 +7,9 @@ from app.brands.models import Brand
 
 @pytest.mark.asyncio
 async def test_create_brand(client: AsyncClient, mocker):
-    mock_brand = Brand(id=1, uuid="test-uuid-123", name="TestBrand", industry="Tech")
+    mock_brand = Brand(id=1, uuid="test-uuid-123", name="TestBrand", industry="Tech", keywords=[], entities=[])
     mocker.patch(
-        "app.brands.router.BrandService.create",
+        "app.brands.router.BrandController.create",
         new_callable=AsyncMock,
         return_value=mock_brand,
     )
@@ -28,9 +28,9 @@ async def test_create_brand(client: AsyncClient, mocker):
 
 @pytest.mark.asyncio
 async def test_get_brand(client: AsyncClient, mocker):
-    mock_brand = Brand(id=1, uuid="test-uuid-123", name="TestBrand", industry="Tech")
+    mock_brand = Brand(id=1, uuid="test-uuid-123", name="TestBrand", industry="Tech", keywords=[], entities=[])
     mocker.patch(
-        "app.brands.router.BrandService.get_by_uuid",
+        "app.brands.router.BrandController.get_by_uuid",
         new_callable=AsyncMock,
         return_value=mock_brand,
     )
@@ -45,7 +45,7 @@ async def test_get_brand(client: AsyncClient, mocker):
 @pytest.mark.asyncio
 async def test_get_brand_not_found(client: AsyncClient, mocker):
     mocker.patch(
-        "app.brands.router.BrandService.get_by_uuid",
+        "app.brands.router.BrandController.get_by_uuid",
         new_callable=AsyncMock,
         return_value=None,
     )
