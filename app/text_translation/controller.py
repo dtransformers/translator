@@ -1,3 +1,4 @@
+from bokeh.core.property.any import Any
 import time
 import logging
 import re
@@ -20,6 +21,8 @@ from app.core.config import settings
 from app.pipeline.reviewer import review_translations_batch
 
 logger = logging.getLogger(__name__)
+
+trustedScore = 0.85
 
 class TextTranslationController:
     def __init__(self, db: AsyncSession):
@@ -133,8 +136,8 @@ class TextTranslationController:
         if not is_in_supported_languages(source_lang, target_lang):
             return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-        cached = await self.translation_svc.find_cached(text, source_lang, target_lang)
-        if cached and cached.trust_score is not None and cached.trust_score >= 0.85:
+        cached: Any = await self.translation_svc.find_cached(text, source_lang, target_lang)
+        if cached and cached.trust_score is not None and float(cached.trust_score) >= trustedScore:
             complexity_score = await calculate_complexity_score(text)
             return {
                 "message": "Translation retrieved from cache",

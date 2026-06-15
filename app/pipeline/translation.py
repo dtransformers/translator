@@ -3,6 +3,7 @@ import json
 import logging
 from typing import Any
 
+import asyncio
 from app.machine_translation import nllb_service
 from app.llms.model import get_llm
 from app.llms.prompts import get_translation_draft_prompt
@@ -80,12 +81,11 @@ async def translate(
         domain_rules: Optional domain rules.
         similar_examples: Optional similar examples for RAG.
     """
-    import asyncio
+  
     
     requires_llm = False
     text_lower = text.lower()
     
-    # 1. Check for brand context exact matches
     if brand_context:
         glossary = brand_context.get("glossary", {})
         if any(term.lower() in text_lower for term in glossary.keys()):
@@ -95,10 +95,8 @@ async def translate(
         if any(kw.lower() in text_lower for kw in keywords):
             requires_llm = True
 
-    # 2. Fall back to complexity score if no brand terms hit
-    if not requires_llm:
-        if complexity_score >= settings.COMPLEXITY_THRESHOLD:
-            requires_llm = True
+    if not requires_llm and complexity_score >= settings.COMPLEXITY_THRESHOLD:
+        requires_llm = True
 
     if requires_llm:
         logger.info(
