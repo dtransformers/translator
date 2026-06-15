@@ -8,7 +8,7 @@ from app.domains.models import Domain
 @pytest.mark.asyncio
 async def test_create_domain(client: AsyncClient, mocker):
     mock_domain = Domain(
-        uuid="test-uuid-123",
+        uuid="123e4567-e89b-12d3-a456-426614174000",
         name="test-domain",
         description="A test domain description",
         content_types=["button", "label"],
@@ -57,7 +57,7 @@ async def test_create_domain(client: AsyncClient, mocker):
 @pytest.mark.asyncio
 async def test_create_domain_already_exists(client: AsyncClient, mocker):
     mock_domain = Domain(
-        uuid="test-uuid-123",
+        uuid="123e4567-e89b-12d3-a456-426614174000",
         name="test-domain",
         description="A test domain description",
         content_types=["button", "label"],
@@ -87,14 +87,14 @@ async def test_create_domain_already_exists(client: AsyncClient, mocker):
 async def test_list_domains(client: AsyncClient, mocker):
     mock_domains = [
         Domain(
-            uuid="uuid-1",
+            uuid="123e4567-e89b-12d3-a456-426614174001",
             name="ui",
             description="UI domain",
             content_types=["button"],
             rules={"creativity": "low"},
         ),
         Domain(
-            uuid="uuid-2",
+            uuid="123e4567-e89b-12d3-a456-426614174002",
             name="marketing",
             description="Marketing domain",
             content_types=["ad_copy"],
@@ -119,7 +119,7 @@ async def test_list_domains(client: AsyncClient, mocker):
 @pytest.mark.asyncio
 async def test_get_domain_by_name(client: AsyncClient, mocker):
     mock_domain = Domain(
-        uuid="uuid-1",
+        uuid="123e4567-e89b-12d3-a456-426614174001",
         name="ui",
         description="UI domain",
         content_types=["button"],
@@ -156,7 +156,7 @@ async def test_get_domain_not_found(client: AsyncClient, mocker):
 @pytest.mark.asyncio
 async def test_update_domain(client: AsyncClient, mocker):
     mock_domain = Domain(
-        uuid="uuid-1",
+        uuid="123e4567-e89b-12d3-a456-426614174001",
         name="ui",
         description="Updated UI domain",
         content_types=["button"],
