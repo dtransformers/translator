@@ -46,12 +46,7 @@ async def translate_with_llm(
     })
 
     raw_content = response.content
-    if isinstance(raw_content, str):
-        content = raw_content
-    elif isinstance(raw_content, list):
-        content = " ".join(str(item) for item in raw_content)
-    else:
-        content = str(raw_content)
+    content = str(raw_content) if not isinstance(raw_content, list) else " ".join(map(str, raw_content))
 
     try:
         content_clean = content.replace("```json", "").replace("```", "").strip()

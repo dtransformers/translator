@@ -15,7 +15,7 @@ from app.db.session import async_session, init_db
 from app.domains.models import Domain
 from app.brands.models import Brand
 from app.text_translation.models import Translation, ReusableUnit
-from app.pipeline.normalization import abstract_entities, canonicalize_text, semantic_fingerprint
+from app.pipeline.normalization import abstract_entities, canonicalize_text
 from app.pipeline.embeddings import get_embedding
 
 logging.basicConfig(level=logging.INFO)
@@ -248,7 +248,7 @@ async def seed_translations(session):
                 abstracted_text = val
                 
             normalized_text = canonicalize_text(abstracted_text)
-            norm_hash = semantic_fingerprint(normalized_text)
+            norm_hash = hashlib.sha256(normalized_text.encode('utf-8')).hexdigest()
             
             try:
                 emb = get_embedding(normalized_text)
