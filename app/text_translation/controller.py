@@ -135,7 +135,7 @@ class TextTranslationController:
 
         cached = await self.translation_svc.find_cached(text, source_lang, target_lang)
         if cached and cached.trust_score is not None and cached.trust_score >= 0.85:
-            complexity_score = calculate_complexity_score(text)
+            complexity_score = await calculate_complexity_score(text)
             return {
                 "message": "Translation retrieved from cache",
                 "translation": cached.translation,
@@ -147,7 +147,7 @@ class TextTranslationController:
 
         brand_context, domain_rules = await self._compile_context(brand_uuid, domain_name, text, target_lang)
 
-        complexity_score = calculate_complexity_score(text)
+        complexity_score = await calculate_complexity_score(text, brand_context, domain_rules)
 
         similar_examples = []
         if complexity_score >= settings.COMPLEXITY_THRESHOLD:

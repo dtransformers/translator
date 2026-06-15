@@ -14,6 +14,10 @@ from app.pipeline import (
     DocumentNode,
     is_ast_compatible,
 )
+from app.pipeline.translation import translate_json_with_llm
+from app.pipeline.complexity import calculate_complexity_score
+from app.core.config import settings
+from app.brands.service import BrandService
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +25,70 @@ class DocumentTranslationController:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.text_ctl = TextTranslationController(db)
+
+    async def _fetch_and_parse_document(self, document_url: str) -> tuple[DocumentNode | None, str, str | None]:
+        try:
+            parsed_url = urlparse(document_url)
+            filename = os.path.basename(parsed_url.path) or "document.json"
+        except Exception:
+            filename = "document.json"
+
+        try:
+            doc_data = await DocumentService.download_json(document_url)
+        except Exception as e:
+            return None, filename, f"Failed to fetch document: {str(e)}"
+
+        try:
+            root_node = json_to_ast(doc_data)
+            doc_node = DocumentNode(root_node, "json")
+            return doc_node, filename, None
+        except Exception as e:
+            return None, filename, f"Failed to parse document to AST: {str(e)}"
+
+    async def _process_local_node(
+        self, node, text: str, source_lang: str, target_lang: str, 
+        brand_uuid: str | None, domain_name: str | None, filename: str
+    ):
+        seg_payload = TranslationRequest(
+            text=text,
+            source_lang=source_lang,
+            target_lang=target_lang,
+        )
+        try:
+            res = await self.text_ctl.translate_text(
+                payload=seg_payload,
+                brand_uuid=brand_uuid,
+                domain_name=domain_name,
+                filename=filename,
+                property_name=node.path,
+            )
+            if "error" in res:
+                logger.warning("Failed to translate segment '%s' in path %s: %s", text[:30], node.path, res["error"])
+                node.translated_value = text
+            else:
+                node.translated_value = res.get("translation", text)
+        except Exception:
+            logger.exception("Error translating segment '%s'", text[:30])
+            node.translated_value = text
+
+    async def _process_llm_batch(
+        self, llm_batch: dict, translatable_nodes: list, source_lang: str, target_lang: str, brand_context: dict
+    ):
+        if not llm_batch:
+            return
+            
+        try:
+            translated_batch = await translate_json_with_llm(
+                llm_batch, source_lang, target_lang, brand_context=brand_context
+            )
+            for node in translatable_nodes:
+                if node.path in translated_batch:
+                    node.translated_value = translated_batch[node.path]
+        except Exception:
+            logger.exception("Failed to batch translate JSON with LLM")
+            for node in translatable_nodes:
+                if node.path in llm_batch:
+                    node.translated_value = node.value
 
     async def translate_document(
         self,
@@ -39,51 +107,39 @@ class DocumentTranslationController:
         if not is_in_supported_languages(source_lang, target_lang):
             return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-        try:
-            parsed_url = urlparse(document_url)
-            filename = os.path.basename(parsed_url.path) or "document.json"
-        except Exception:
-            filename = "document.json"
-
-        try:
-            doc_data = await DocumentService.download_json(document_url)
-        except Exception as e:
-            return {"error": f"Failed to fetch document: {str(e)}"}
-
-        try:
-            root_node = json_to_ast(doc_data)
-            doc_node = DocumentNode(root_node, "json")
-        except Exception as e:
-            return {"error": f"Failed to parse document to AST: {str(e)}"}
+        doc_node, filename, err = await self._fetch_and_parse_document(document_url)
+        if err:
+            return {"error": err}
 
         translatable_nodes = collect_translatable_nodes(doc_node)
         
+        brand_service = BrandService(self.db)
+        brand_context = await brand_service.get_brand_context(brand_uuid) if brand_uuid else {}
+        glossary = brand_context.get("glossary", {}) if brand_context else {}
+        keywords = brand_context.get("keywords", []) if brand_context else []
+
+        llm_batch: dict[str, str] = {}
         for node in translatable_nodes:
-            seg_payload = TranslationRequest(
-                text=node.value,
-                source_lang=source_lang,
-                target_lang=target_lang,
+            text = node.value
+            text_lower = text.lower()
+
+            # Flattened complexity checks to reduce nesting
+            requires_llm = (
+                any(term.lower() in text_lower for term in glossary.keys()) or
+                any(kw.lower() in text_lower for kw in keywords) or
+                await calculate_complexity_score(text, brand_context) >= settings.COMPLEXITY_THRESHOLD
             )
-            try:
-                res = await self.text_ctl.translate_text(
-                    payload=seg_payload,
-                    brand_uuid=brand_uuid,
-                    domain_name=domain_name,
-                    filename=filename,
-                    property_name=node.path,
+
+            if requires_llm:
+                llm_batch[node.path] = text
+            else:
+                await self._process_local_node(
+                    node, text, source_lang, target_lang, brand_uuid, domain_name, filename
                 )
-                if "error" in res:
-                    logger.warning("Failed to translate segment '%s' in path %s: %s", node.value[:30], node.path, res["error"])
-                    node.translated_value = node.value
-                else:
-                    node.translated_value = res.get("translation", node.value)
-            except Exception:
-                logger.exception("Error translating segment '%s'", node.value[:30])
-                node.translated_value = node.value
 
-        # Reconstitute the document from AST
+        await self._process_llm_batch(llm_batch, translatable_nodes, source_lang, target_lang, brand_context)
+
         translated_document = doc_node.to_dict()
-
         translated_ast_root = json_to_ast(translated_document)
         translated_doc_node = DocumentNode(translated_ast_root, "json")
         
