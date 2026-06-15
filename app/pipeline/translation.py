@@ -56,7 +56,7 @@ async def translate_with_llm(
             return str(translated_list[0])
         return content
     except Exception as e:
-        logger.error("Failed to parse LLM response: %s", e)
+        logger.exception("Failed to parse LLM response: %s", e)
         return content
 
 
@@ -155,5 +155,5 @@ async def translate_json_with_llm(
         translated_dict = json.loads(content_clean)
         return translated_dict
     except json.JSONDecodeError:
-        logger.error("Failed to parse LLM JSON batch response.")
+        logger.exception("Failed to parse LLM JSON batch response.")
         return {}
