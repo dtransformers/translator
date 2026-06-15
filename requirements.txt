@@ -27,3 +27,4 @@ boto3
 typer
 aiofiles
 wordfreq
+pytest-cov
