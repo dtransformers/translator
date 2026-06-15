@@ -202,15 +202,9 @@ async def background_bucket_translation(operation_id: str, payload: BucketTransl
     tasks = []
     
     for file_obj in files:
-        if isinstance(file_obj, str):
-            # Fallback if dictionary format is not implemented properly
-            key = cast(str, file_obj)
-            size = 0
-            etag = ""
-        else:
-            key = cast(str, file_obj['Key'])
-            size = cast(int, file_obj['Size'])
-            etag = cast(str, file_obj['ETag'])
+        key = str(file_obj['Key'])
+        size = int(file_obj['Size'])
+        etag = str(file_obj['ETag'])
             
         file_hash = f"{etag}-{size}"
         

@@ -24,3 +24,5 @@ pgvector
 sentence-transformers
 langchain-ollama
 boto3
+typer
+aiofiles

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------
+# translator — shell alias for the  translation CLI
+#
+# Usage:
+#   ./scripts/translator init
+#   ./scripts/translator translate -i en.json -o ar.json -t ar
+#   ./scripts/translator --help
+#
+# TIP: For a global alias, add to your ~/.zshrc:
+#
+#   alias translator="conda run -n translator python {{LOCATION}}
+#
+# Then reload:  source ~/.zshrc
+# -----------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+exec conda run -n translator \
+    python "$SCRIPT_DIR/translate_json.py" "$@"
