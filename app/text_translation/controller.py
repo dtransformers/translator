@@ -222,18 +222,4 @@ class TextTranslationController:
         await review_translations_batch(self.db)
 
 
-async def translate_text_controller(
-    payload: TranslationRequest,
-    db: AsyncSession,
-    brand_uuid: str | None = None,
-    domain_name: str | None = None,
-    filename: str | None = None,
-    property_name: str | None = None,
-) -> dict:
-    ctl = TextTranslationController(db)
-    return await ctl.translate_text(payload, brand_uuid, domain_name, filename, property_name)
-
-def detect_language_controller(payload: DetectionRequest) -> dict:
-    ctl = TextTranslationController(None)
-    return ctl.detect_language(payload)
 

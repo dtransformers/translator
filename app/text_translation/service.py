@@ -9,7 +9,7 @@ from sqlalchemy import or_
 
 from app.text_translation.models import Translation, ReusableUnit
 from app.text_translation.repository import TranslationRepository, ReusableUnitRepository
-from app.pipeline.normalization import canonicalize_text, abstract_entities, semantic_fingerprint
+from app.pipeline.normalization import canonicalize_text, abstract_entities
 from app.pipeline.embeddings import get_embedding
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ class TranslationService:
         # --- L2: Normalized hash ---
         abstracted_text, entities = await abstract_entities(text, language=source_lang)
         normalized_text = canonicalize_text(abstracted_text)
-        norm_hash = semantic_fingerprint(normalized_text)
+        norm_hash = hashlib.sha256(normalized_text.encode('utf-8')).hexdigest()
 
         l2_query = (
             select(Translation)
@@ -152,7 +152,7 @@ class TranslationService:
             exact_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
             abstracted_text, _ = await abstract_entities(text, language=source_lang)
             normalized_text = canonicalize_text(abstracted_text)
-            norm_hash = semantic_fingerprint(normalized_text)
+            norm_hash = hashlib.sha256(normalized_text.encode('utf-8')).hexdigest()
 
             try:
                 emb = await asyncio.to_thread(get_embedding, normalized_text)

@@ -1,15 +1,15 @@
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.domains.models import Domain
 from app.domains.schemas import DomainCreate, DomainUpdate
-from app.domains.repository import DomainRepository
 
 logger = logging.getLogger(__name__)
 
 class DomainService:
     def __init__(self, db: AsyncSession):
-        self._repo = DomainRepository(db)
+        self._db = db
 
     async def create(self, domain_in: DomainCreate) -> Domain:
         logger.info(f"Creating domain: {domain_in.name}")
@@ -19,16 +19,21 @@ class DomainService:
             content_types=domain_in.content_types,
             rules=domain_in.rules.model_dump(exclude_unset=True)
         )
-        return await self._repo.create(db_domain)
+        self._db.add(db_domain)
+        await self._db.commit()
+        await self._db.refresh(db_domain)
+        return db_domain
 
     async def get_by_name(self, name: str) -> Domain | None:
-        return await self._repo.get_by_name(name)
+        result = await self._db.execute(select(Domain).where(Domain.name == name))
+        return result.scalars().first()
 
     async def list_domains(self) -> list[Domain]:
-        return await self._repo.list_domains()
+        result = await self._db.execute(select(Domain))
+        return list(result.scalars().all())
 
     async def update(self, name: str, domain_in: DomainUpdate) -> Domain | None:
-        db_domain = await self._repo.get_by_name(name)
+        db_domain = await self.get_by_name(name)
         if not db_domain:
             return None
         
@@ -43,12 +48,15 @@ class DomainService:
         for field, value in update_data.items():
             setattr(db_domain, field, value)
             
-        return await self._repo.save(db_domain)
+        await self._db.commit()
+        await self._db.refresh(db_domain)
+        return db_domain
 
     async def delete(self, name: str) -> bool:
-        db_domain = await self._repo.get_by_name(name)
+        db_domain = await self.get_by_name(name)
         if not db_domain:
             return False
         
-        await self._repo.delete(db_domain)
+        await self._db.delete(db_domain)
+        await self._db.commit()
         return True

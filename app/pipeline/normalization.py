@@ -56,9 +56,7 @@ async def abstract_entities(text: str, language: str = "en_XX") -> tuple[str, Li
 
     return abstracted_text, entities
 
-def semantic_fingerprint(text: str) -> str:
 
-    return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 def segment_text(text: str) -> List[str]:
 

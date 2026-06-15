@@ -1,8 +1,6 @@
 from typing import Optional
 
 def build_translation_context(
-    source_lang: str,
-    target_lang: str,
     glossary: Optional[dict[str, str]] = None,
     translation_memory: Optional[list[dict[str, str]]] = None
 ) -> str:

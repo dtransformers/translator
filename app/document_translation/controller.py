@@ -100,12 +100,4 @@ class DocumentTranslationController:
             "translated_document": translated_document,
         }
 
-async def translate_document_controller(
-    payload: DocumentTranslationRequest,
-    db: AsyncSession,
-    brand_uuid: str | None = None,
-    domain_name: str | None = None,
-) -> dict:
-    ctl = DocumentTranslationController(db)
-    return await ctl.translate_document(payload, brand_uuid, domain_name)
 
