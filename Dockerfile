@@ -14,7 +14,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
 # Stage 2: Production
 FROM python:3.14.4-slim
