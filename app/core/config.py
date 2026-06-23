@@ -10,17 +10,17 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: str
-    DUCKLING_URL: str = "http://translator_duckling:8000/parse"
+    DUCKLING_URL: str 
 
     # LLM Settings
-    LLM_PROVIDER: str = "gemini" # gemini or ollama
-    GEMINI_API_KEY: str | None = None
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    LLM_MODEL_NAME: str = "gemini-1.5-flash"
+    LLM_PROVIDER: str 
+    GEMINI_API_KEY: str 
+    OLLAMA_BASE_URL: str 
+    LLM_MODEL_NAME: str 
 
     # Authentication
-    API_USERNAME: str = "admin"
-    API_PASSWORD: str = "changeme"
+    API_USERNAME: str
+    API_PASSWORD: str 
 
     COMPLEXITY_THRESHOLD: int = 50
 

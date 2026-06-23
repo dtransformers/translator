@@ -44,5 +44,5 @@ async def init_db():
                 
             logger.info("Database tables verified/created.")
     except Exception as e:
-        logger.error(f"Failed to connect to the database or create tables: {e}")
+        logger.exception(f"Failed to connect to the database or create tables: {e}")
         raise e

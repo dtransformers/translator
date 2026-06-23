@@ -9,7 +9,7 @@ from app.pipeline.document import (
     DocumentNode,
     TextNode,
 )
-from app.document_translation.controller import translate_document_controller
+from app.document_translation.controller import DocumentTranslationController
 from app.document_translation.schemas import DocumentTranslationRequest
 
 
@@ -109,9 +109,9 @@ async def test_translate_document_controller_success(mocker):
         brand_uuid=None
     )
 
-    result = await translate_document_controller(
+    ctl = DocumentTranslationController(db_mock)
+    result = await ctl.translate_document(
         payload=request_payload,
-        db=db_mock,
         brand_uuid=None,
         domain_name=None
     )
@@ -134,9 +134,9 @@ async def test_translate_document_controller_unsupported_languages(mocker):
         brand_uuid=None
     )
 
-    result = await translate_document_controller(
-        payload=request_payload,
-        db=db_mock
+    ctl = DocumentTranslationController(db_mock)
+    result = await ctl.translate_document(
+        payload=request_payload
     )
 
     assert "error" in result
@@ -159,9 +159,9 @@ async def test_translate_document_controller_http_failure(mocker):
         brand_uuid=None
     )
 
-    result = await translate_document_controller(
-        payload=request_payload,
-        db=db_mock
+    ctl = DocumentTranslationController(db_mock)
+    result = await ctl.translate_document(
+        payload=request_payload
     )
 
     assert "error" in result
@@ -203,7 +203,7 @@ async def test_translate_document_endpoint_integration(client: AsyncClient, mock
 async def test_translate_text_controller_cache_hit_fields(mocker):
     from app.text_translation.models import Translation
     from app.text_translation.schemas import TranslationRequest
-    from app.text_translation.controller import translate_text_controller
+    from app.text_translation.controller import TextTranslationController
 
     db_mock = AsyncMock()
     mock_translation = Translation(
@@ -212,6 +212,11 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
         score=0.95,
         trust_score=0.95,
         detected_input_lang="en"
+    )
+
+    mocker.patch(
+        "app.text_translation.controller.is_source_target_compatible",
+        return_value={"compatible": True, "detected_lang": "en"}
     )
 
     mocker.patch(
@@ -225,7 +230,8 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
         target_lang="es"
     )
 
-    result = await translate_text_controller(payload, db=db_mock)
+    ctl = TextTranslationController(db_mock)
+    result = await ctl.translate_text(payload)
     assert result["cached"] is True
     assert result["translation"] == "Hola mundo"
     assert result["score"] == 0.95
@@ -237,7 +243,7 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
 async def test_translate_text_controller_llm_rag_lookup(mocker):
     from app.text_translation.models import Translation
     from app.text_translation.schemas import TranslationRequest
-    from app.text_translation.controller import translate_text_controller
+    from app.text_translation.controller import TextTranslationController
 
     db_mock = AsyncMock()
     
@@ -293,7 +299,8 @@ async def test_translate_text_controller_llm_rag_lookup(mocker):
         target_lang="es"
     )
 
-    result = await translate_text_controller(payload, db=db_mock)
+    ctl = TextTranslationController(db_mock)
+    result = await ctl.translate_text(payload)
     
     assert result["translation"] == "Hola mundito"
     # Verify mock_translate was called with the RAG example

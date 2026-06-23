@@ -12,8 +12,10 @@ class MockAsyncSession:
     pass
 
 
+from app.core.config import settings
+
 # Test credentials matching the defaults in config
-TEST_AUTH = BasicAuth(username="admin", password="changeme")
+TEST_AUTH = BasicAuth(username=settings.API_USERNAME, password=settings.API_PASSWORD)
 
 
 @pytest.fixture
