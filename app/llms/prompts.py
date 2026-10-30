@@ -98,7 +98,7 @@ Input:
 def get_translation_draft_prompt() -> ChatPromptTemplate:
     system_msg = SystemMessagePromptTemplate.from_template("You are a professional translation engine.")
     human_msg = HumanMessagePromptTemplate.from_template("""Task:
-Translate the following list of strings from {source_language} to {target_language}.
+Translate the following texts from {source_language} to {target_language}.
 
 Context:
 - Industry: {industry}
@@ -120,10 +120,7 @@ Similar Translation Examples (Reference only):
 {rag_examples}
 
 Output:
-Return ONLY a raw JSON array of translated strings.
-
-Example:
-["translated_text_1", "translated_text_2"]
+{output_instructions}
 
 Texts:
 {texts}""")
