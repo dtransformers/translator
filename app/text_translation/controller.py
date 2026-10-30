@@ -22,8 +22,6 @@ from app.pipeline.reviewer import review_translations_batch
 
 logger = logging.getLogger(__name__)
 
-trustedScore = 0.85
-
 class TextTranslationController:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -137,7 +135,7 @@ class TextTranslationController:
             return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
         cached: Any = await self.translation_svc.find_cached(text, source_lang, target_lang)
-        if cached and cached.trust_score is not None and float(cached.trust_score) >= trustedScore:
+        if cached and cached.trust_score is not None and float(cached.trust_score) >= settings.TRUST_SCORE_THRESHOLD:
             complexity_score = await calculate_complexity_score(text)
             return {
                 "message": "Translation retrieved from cache",
@@ -196,6 +194,8 @@ class TextTranslationController:
             detected_output_lang=target_lang,
             is_successed=is_successed,
             score=comet_score,
+            trust_score=comet_score,
+            complexity_score=complexity_score,
             notes=notes,
             translation_time=translation_time_elapsed,
             input_size=len(text),

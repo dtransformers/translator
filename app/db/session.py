@@ -37,7 +37,6 @@ async def init_db():
             try:
                 await conn.execute(text("ALTER TABLE translations ADD COLUMN IF NOT EXISTS trust_score FLOAT"))
                 await conn.execute(text("ALTER TABLE translations ADD COLUMN IF NOT EXISTS complexity_score FLOAT"))
-                await conn.execute(text("UPDATE translations SET trust_score = score WHERE trust_score IS NULL"))
                 logger.info("Database migration for trust_score and complexity_score complete.")
             except Exception as e:
                 logger.warning(f"Column addition failed (might already exist): {e}")

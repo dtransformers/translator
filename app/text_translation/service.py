@@ -11,8 +11,24 @@ from app.text_translation.models import Translation, ReusableUnit
 from app.text_translation.repository import TranslationRepository, ReusableUnitRepository
 from app.pipeline.normalization import canonicalize_text, abstract_entities
 from app.pipeline.embeddings import get_embedding
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Embeddings barely separate "free" from "not free", so a semantic match is
+# only reused when both texts carry the same negation words.
+NEGATION_WORDS = {
+    "en": {"not", "no", "never", "none", "nothing", "nobody", "neither", "nor", "without",
+           "cannot", "cant", "dont", "doesnt", "didnt", "isnt", "arent", "wasnt", "werent",
+           "wont", "wouldnt", "shouldnt", "couldnt", "hasnt", "havent", "hadnt"},
+    "fr": {"ne", "pas", "jamais", "aucun", "aucune", "rien", "personne", "sans", "ni"},
+    "es": {"no", "nunca", "jamás", "ningún", "ninguno", "ninguna", "nada", "nadie", "sin", "ni"},
+}
+
+
+def _negations(normalized_text: str, lang: str) -> set[str]:
+    words = NEGATION_WORDS.get(lang, set())
+    return {w for w in normalized_text.split() if w in words}
 
 class TranslationService:
     def __init__(self, db: AsyncSession):
@@ -94,7 +110,6 @@ class TranslationService:
                     "cannot reuse cached translation, re-translating",
                     len(entities),
                 )
-        SEMANTIC_DISTANCE_THRESHOLD = 0.08
         try:
             query_embedding = await asyncio.to_thread(get_embedding, normalized_text)
             l3_query = (
@@ -107,6 +122,7 @@ class TranslationService:
                     Translation.translation_language == target_lang,
                     Translation.is_successed == True,  
                     Translation.embedding != None, 
+                    Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
                 )
                 .order_by("distance")
                 .limit(1)
@@ -121,12 +137,19 @@ class TranslationService:
                     "L3 Semantic candidate for '%s': distance=%.4f, similarity=%.4f",
                     text[:30], distance, similarity,
                 )
-                if distance <= SEMANTIC_DISTANCE_THRESHOLD:
+                if distance <= settings.SEMANTIC_CACHE_MAX_DISTANCE:
                     if entities:
                         logger.info(
                             "L3 semantic match (sim=%.4f) but %d entities "
                             "present — cannot reuse, re-translating",
                             similarity, len(entities),
+                        )
+                    elif _negations(normalized_text, source_lang) != _negations(
+                        l3_hit.normalized_text or "", source_lang
+                    ):
+                        logger.info(
+                            "L3 semantic match (sim=%.4f) but negation differs — re-translating",
+                            similarity,
                         )
                     else:
                         logger.info(
@@ -136,8 +159,8 @@ class TranslationService:
                         return l3_hit
                 else:
                     logger.info(
-                        "L3 below threshold (sim=%.4f < 0.92), skipping cache",
-                        similarity,
+                        "L3 below threshold (distance=%.4f > %.4f), skipping cache",
+                        distance, settings.SEMANTIC_CACHE_MAX_DISTANCE,
                     )
         except Exception as e:
             logger.warning("L3 Semantic cache failed: %s", e)
