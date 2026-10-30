@@ -30,7 +30,7 @@ def _load_models():
         
     try:
         logger.info("Loading LCP model (roberta-base-complex-word-identification)...")
-        _lcp_pipe = pipeline("text-classification", model="bhavsarpratik/roberta-base-complex-word-identification")
+        _lcp_pipe = pipeline("text-classification", model="papluca/xlm-roberta-base-language-detection")
     except Exception as e:
         logger.exception(f"Failed to load LCP model: {e}")
         

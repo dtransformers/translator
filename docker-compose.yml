@@ -16,6 +16,7 @@ services:
       - DUCKLING_URL=http://translator_duckling:8000/parse
       # Ensure LLM/S3 external dependencies are picked up dynamically from .env
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION_NAME=${AWS_REGION_NAME}

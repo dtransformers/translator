@@ -62,3 +62,42 @@ class ProviderSchemaTests(unittest.TestCase):
                             else:
                                 with self.assertRaises(OutputParserException):
                                     chain.invoke('Translate')
+
+    def test_openrouter_sends_strict_schema_and_validates_responses(self):
+        import json
+        from unittest.mock import patch
+        import httpx
+        from pydantic import ValidationError
+        from app.llms.model import _get_openrouter_model
+
+        for schema, valid in (
+            (TranslationResult, {'translation': 'Bonjour'}),
+            (translation_batch_schema({'a.b[0]': 'Hello'}), {'a.b[0]': 'Bonjour'}),
+        ):
+            for payload in (valid, {}, {'unexpected': 'text'}):
+                requests = []
+
+                def handler(request):
+                    requests.append(request)
+                    return httpx.Response(200, json={
+                        'id': 'test', 'object': 'chat.completion', 'created': 0, 'model': 'test',
+                        'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+                            'role': 'assistant', 'content': json.dumps(payload)}}],
+                    })
+
+                with self.subTest(schema=schema.__name__, payload=payload), \
+                        patch('app.llms.model.settings.OPENROUTER_API_KEY', 'test'):
+                    model = _get_openrouter_model()
+                    model.root_client._client = httpx.Client(transport=httpx.MockTransport(handler))
+                    chain = model.with_structured_output(schema, method='json_schema')
+                    if payload == valid:
+                        self.assertEqual(chain.invoke('Translate').model_dump(by_alias=True), valid)
+                    else:
+                        with self.assertRaises(ValidationError):
+                            chain.invoke('Translate')
+
+                    body = json.loads(requests[0].content)
+                    self.assertEqual(str(requests[0].url), 'https://openrouter.ai/api/v1/chat/completions')
+                    self.assertEqual(body['provider'], {'require_parameters': True})
+                    self.assertTrue(body['response_format']['json_schema']['strict'])
+                    self.assertEqual(body['response_format']['json_schema']['schema'], schema.model_json_schema())

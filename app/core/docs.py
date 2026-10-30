@@ -5,7 +5,7 @@ API_DESCRIPTION = """A modular FastAPI application for high-quality, context-awa
 
 ## Features
 
-- **Multi-engine translation** — NLLB-200 for simple texts, LLM (Gemini / Ollama) for complex texts
+- **Multi-engine translation** — NLLB-200 for simple texts, LLM (Gemini / Ollama / OpenRouter) for complex texts
 - **Multi-tier semantic caching** — exact → normalized → vector similarity lookup
 - **Brand context injection** — tone, glossary, audience, entities
 - **Reusable translation units** — known phrases/entities auto-injected as glossary

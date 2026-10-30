@@ -36,7 +36,7 @@ Before invoking any heavy translation models, the input is validated and verifie
 
 ### 4. Translation Step
 - **Simple Inputs (Score < 50):** The text is passed to our local, fast Machine Translation model (`MarianMT` / `Helsinki-NLP`).
-- **Complex Inputs (Score >= 50):** The text is routed through an LLM sequence using native JSON-schema constrained output (Gemini or Ollama) with strict Pydantic validation and follow your specific brand guidelines.
+- **Complex Inputs (Score >= 50):** The text is routed through an LLM sequence using native JSON-schema constrained output (Gemini, Ollama or OpenRouter) with strict Pydantic validation and follow your specific brand guidelines.
 
 ### 5. Quality Estimation & Return Step
 - **Quality Scoring:** The generated translation is scored alongside the source text using a reference-free, cross-lingual semantic similarity model. This gives us a confidence/quality score between 0.0 and 1.0.
