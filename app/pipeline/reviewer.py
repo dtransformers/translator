@@ -15,6 +15,7 @@ from app.pipeline.complexity import calculate_complexity_score
 from app.pipeline.quality import score_translation
 from app.llms.model import get_llm
 from app.llms.prompts import get_fix_translation_prompt
+from app.llms.schemas import FixedTranslation
 
 logger = logging.getLogger(__name__)
 
@@ -22,27 +23,15 @@ async def fix_translation_with_llm(source_text: str, bad_translation: str, targe
     try:
         llm = get_llm()
         prompt = get_fix_translation_prompt()
-        chain = prompt | llm
+        chain = prompt | llm.with_structured_output(FixedTranslation, method="json_schema")
         
         response = await chain.ainvoke({
             "target_language": target_lang,
             "source_text": source_text,
             "bad_translation": bad_translation
         })
-        
-        raw_content = response.content
-        if isinstance(raw_content, str):
-            content = raw_content
-        elif isinstance(raw_content, list):
-            content = " ".join(str(item) for item in raw_content)
-        else:
-            content = str(raw_content)
             
-        content = content.strip()
-        if content.startswith('"') and content.endswith('"'):
-            content = content[1:-1]
-            
-        return content
+        return response.corrected_translation.strip()
     except Exception as e:
         logger.exception(f"Failed to fix translation with LLM: {e}")
         return bad_translation

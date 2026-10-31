@@ -102,13 +102,15 @@ async def _get_llm_fallback_score(text: str, current_score: int) -> int:
     try:
         from app.core.config import settings
         from app.llms.model import get_llm
+        from app.llms.prompts import get_complexity_rating_prompt
+        from app.llms.schemas import ComplexityRating
         threshold = settings.COMPLEXITY_THRESHOLD
         if threshold - 5 <= current_score <= threshold + 5:
-            llm = get_llm()
-            prompt = f"Rate the translation complexity of the following text from 0 to 100, where 100 is highly complex. Output ONLY the integer.\n\nText: {text}"
-            response = await llm.ainvoke(prompt)
-            llm_score = int(re.search(r'\d+', response.content).group())
-            return int((current_score + llm_score) / 2)
+            chain = get_complexity_rating_prompt() | get_llm().with_structured_output(
+                ComplexityRating, method="json_schema"
+            )
+            rating = await chain.ainvoke({"text": text})
+            return int((current_score + rating.score) / 2)
     except Exception as e:
         logger.debug(f"LLM fallback failed: {e}")
     return current_score

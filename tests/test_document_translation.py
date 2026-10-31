@@ -202,7 +202,7 @@ async def test_translate_document_endpoint_integration(client: AsyncClient, mock
 @pytest.mark.asyncio
 async def test_translate_text_controller_cache_hit_fields(mocker):
     from app.text_translation.models import Translation
-    from app.text_translation.schemas import TranslationRequest
+    from app.text_translation.schemas import TranslationRequest, TranslationSource
     from app.text_translation.controller import TextTranslationController
 
     db_mock = AsyncMock()
@@ -221,7 +221,7 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
 
     mocker.patch(
         "app.text_translation.controller.TranslationService.find_cached",
-        return_value=mock_translation
+        return_value=(mock_translation, TranslationSource.SEMANTIC_CACHE)
     )
     # Legacy cached rows have no stored complexity_score, so it is recomputed with brand/domain context
     compile_context = mocker.patch(
@@ -247,6 +247,7 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
     assert result["translation"] == "Hola mundo"
     assert result["score"] == 0.95
     assert result["complexity_score"] == 8
+    assert result["source"] == TranslationSource.SEMANTIC_CACHE
     assert result["detected_input_lang"] == "en"
     compile_context.assert_awaited_once()
 

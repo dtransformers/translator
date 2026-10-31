@@ -1,5 +1,14 @@
+from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
+
+
+class TranslationSource(str, Enum):
+    LLM = "llm"
+    MACHINE_TRANSLATION = "machine_translation"
+    EXACT_CACHE = "exact_cache"
+    NORMALIZED_CACHE = "normalized_cache"
+    SEMANTIC_CACHE = "semantic_cache"
 
 class TranslationRequest(BaseModel):
     text: str = Field(..., description="The text to translate", min_length=1)
@@ -21,6 +30,13 @@ class TranslationRequest(BaseModel):
 class TranslationData(BaseModel):
     message: str = Field(..., description="Status message explaining the result")
     translation: Optional[str] = Field(None, description="The translated text, or the original text if skipped")
+    source: Optional[TranslationSource] = Field(
+        None,
+        description=(
+            "Where the translation came from: `llm`, `machine_translation` (NLLB-200), "
+            "`exact_cache`, `normalized_cache` or `semantic_cache`. Null when skipped"
+        ),
+    )
     score: Optional[float] = Field(
         None,
         ge=-1.0,
@@ -44,6 +60,7 @@ class TranslationData(BaseModel):
                 {
                     "message": "Translation completed",
                     "translation": "Hola mundo, esta es una solicitud de traducción de prueba.",
+                    "source": "machine_translation",
                     "score": 0.89,
                     "complexity_score": 12,
                     "detected_input_lang": "en",

@@ -101,3 +101,82 @@ class ProviderSchemaTests(unittest.TestCase):
                     self.assertEqual(body['provider'], {'require_parameters': True})
                     self.assertTrue(body['response_format']['json_schema']['strict'])
                     self.assertEqual(body['response_format']['json_schema']['schema'], schema.model_json_schema())
+
+
+class PromptSchemaTests(unittest.TestCase):
+    """Every prompt renders with its inputs and pairs with a strict native schema."""
+
+    def _pairs(self):
+        from app.llms import prompts
+        from app.llms import schemas
+        return (
+            (prompts.get_summary_prompt(), schemas.FileSummary,
+             {'target_language': 'fr', 'filename': 'a.json', 'content': 'Hello'}),
+            (prompts.get_context_prompt(), schemas.TranslationContext,
+             {'target_language': 'fr', 'filename': 'a.json', 'base_context': '{}', 'content': 'Hello'}),
+            (prompts.get_global_context_prompt(), schemas.GlobalTranslationContext,
+             {'target_language': 'fr', 'compact_files': '[]'}),
+            (prompts.get_translation_draft_prompt(), schemas.TranslationResult,
+             {'source_language': 'en', 'target_language': 'fr', 'industry': 'x', 'summary': 'x',
+              'glossary': '{}', 'domain_rules': '{}', 'rag_examples': 'None', 'texts': '["Hi"]',
+              'output_instructions': 'x'}),
+            (prompts.get_translation_refine_prompt(), schemas.RefinedTranslations,
+             {'target_language': 'fr', 'tone': 'x', 'audience': 'x', 'draft_translations': '["Salut"]'}),
+            (prompts.get_validation_prompt(), schemas.TranslationValidation,
+             {'source_lang': 'en', 'target_lang': 'fr', 'source_text': 'Hi', 'translated_text': 'Salut'}),
+            (prompts.get_fix_translation_prompt(), schemas.FixedTranslation,
+             {'target_language': 'fr', 'source_text': 'Hi', 'bad_translation': 'Bonjour'}),
+            (prompts.get_complexity_rating_prompt(), schemas.ComplexityRating, {'text': 'Hi'}),
+        )
+
+    def test_prompts_render_and_no_longer_describe_json_by_hand(self):
+        for prompt, schema, inputs in self._pairs():
+            with self.subTest(schema=schema.__name__):
+                self.assertEqual(set(prompt.input_variables), set(inputs))
+                rendered = '\n'.join(m.content for m in prompt.format_messages(**inputs))
+                self.assertNotIn('JSON SCHEMA', rendered.upper())
+                self.assertNotIn('ONLY VALID JSON', rendered.upper())
+
+    def test_schemas_are_strict_for_native_decoding(self):
+        def walk(node):
+            if isinstance(node, dict):
+                if node.get('type') == 'object':
+                    # Strict providers reject open-ended objects, e.g. dict[str, str]
+                    self.assertIs(node.get('additionalProperties'), False)
+                    self.assertEqual(set(node.get('required', [])), set(node.get('properties', {})))
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+
+        for _, schema, _ in self._pairs():
+            with self.subTest(schema=schema.__name__):
+                walk(schema.model_json_schema())
+
+    def test_reviewer_and_complexity_use_structured_output(self):
+        import asyncio
+        from unittest.mock import MagicMock, patch
+        from langchain_core.runnables import RunnableLambda
+        from app.llms.schemas import ComplexityRating, FixedTranslation
+        from app.pipeline import complexity, reviewer
+
+        bound = {}
+
+        def fake_llm(result):
+            llm = MagicMock()
+            def with_structured_output(schema, method):
+                bound['schema'], bound['method'] = schema, method
+                return RunnableLambda(lambda _: result)
+            llm.with_structured_output.side_effect = with_structured_output
+            return llm
+
+        with patch('app.pipeline.reviewer.get_llm',
+                   return_value=fake_llm(FixedTranslation(corrected_translation=' Bonjour '))):
+            fixed = asyncio.run(reviewer.fix_translation_with_llm('Hello', 'Salut', 'fr'))
+        self.assertEqual((fixed, bound['schema'], bound['method']), ('Bonjour', FixedTranslation, 'json_schema'))
+
+        with patch('app.llms.model.get_llm', return_value=fake_llm(ComplexityRating(score=80))), \
+                patch('app.core.config.settings.COMPLEXITY_THRESHOLD', 50):
+            score = asyncio.run(complexity._get_llm_fallback_score('Hello', 50))
+        self.assertEqual((score, bound['schema'], bound['method']), (65, ComplexityRating, 'json_schema'))

@@ -12,6 +12,7 @@ from app.text_translation.repository import TranslationRepository, ReusableUnitR
 from app.pipeline.normalization import canonicalize_text, abstract_entities
 from app.pipeline.embeddings import get_embedding
 from app.core.config import settings
+from app.text_translation.schemas import TranslationSource
 
 logger = logging.getLogger(__name__)
 
@@ -194,21 +195,21 @@ class TranslationService:
         text: str,
         source_lang: str,
         target_lang: str,
-    ) -> Translation | None:
+    ) -> tuple[Translation, TranslationSource] | None:
         """
         Multi-tier cache lookup:
           L1 — exact text / SHA-256 hash match
           L2 — normalized + entity-abstracted hash match
           L3 — semantic vector similarity (pgvector cosine distance)
 
-        Returns the best matching approved Translation, or None.
+        Returns the best matching trusted Translation and the tier that matched, or None.
         """
         if not text:
             return None
 
         # --- L1: Exact match ---
         if l1_hit := await self._find_l1_exact(text, source_lang, target_lang):
-            return l1_hit
+            return l1_hit, TranslationSource.EXACT_CACHE
 
         # --- L2: Normalized hash ---
         abstracted_text, entities = await abstract_entities(text, language=source_lang)
@@ -217,12 +218,14 @@ class TranslationService:
         if l2_hit := await self._find_l2_normalized(
             normalized_text, entities, source_lang, target_lang, text
         ):
-            return l2_hit
+            return l2_hit, TranslationSource.NORMALIZED_CACHE
 
         # --- L3: Semantic match ---
-        return await self._find_l3_semantic(
+        if l3_hit := await self._find_l3_semantic(
             normalized_text, entities, source_lang, target_lang, text
-        )
+        ):
+            return l3_hit, TranslationSource.SEMANTIC_CACHE
+        return None
 
     async def save_with_cache_fields(self, **kwargs) -> Translation:
         text = kwargs.get("value")

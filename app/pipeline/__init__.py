@@ -6,7 +6,7 @@ from .verification import (
     SUPPORTED_PAIRS,
 )
 from .complexity import calculate_complexity_score
-from .translation import translate
+from .translation import translate, routes_to_llm
 from .quality import score_translation
 from .document import (
     ASTNode,
@@ -26,6 +26,7 @@ __all__ = [
     "is_in_supported_languages",
     "calculate_complexity_score",
     "translate",
+    "routes_to_llm",
     "score_translation",
     "SUPPORTED_LANGUAGES",
     "SUPPORTED_PAIRS",

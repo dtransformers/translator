@@ -7,9 +7,9 @@ from .prompts import (
     get_global_context_prompt,
     get_translation_draft_prompt,
     get_translation_refine_prompt,
-    get_json_repair_prompt,
     get_validation_prompt,
     get_fix_translation_prompt,
+    get_complexity_rating_prompt,
     build_batch_metadata
 )
 
@@ -22,8 +22,8 @@ __all__ = [
     "get_global_context_prompt",
     "get_translation_draft_prompt",
     "get_translation_refine_prompt",
-    "get_json_repair_prompt",
     "get_validation_prompt",
     "get_fix_translation_prompt",
+    "get_complexity_rating_prompt",
     "build_batch_metadata"
 ]

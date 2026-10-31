@@ -51,6 +51,23 @@ async def translate_with_llm(
     return response.translation
 
 
+def routes_to_llm(
+    text: str,
+    complexity_score: int,
+    brand_context: dict[str, Any] | None = None,
+) -> bool:
+    """True when the text needs the LLM: brand glossary/keyword match or complexity >= threshold."""
+    if brand_context:
+        text_lower = text.lower()
+        glossary = brand_context.get("glossary", {})
+        if any(term.lower() in text_lower for term in glossary.keys()):
+            return True
+        keywords = brand_context.get("keywords", [])
+        if any(kw.lower() in text_lower for kw in keywords):
+            return True
+    return complexity_score >= settings.COMPLEXITY_THRESHOLD
+
+
 async def translate(
     text: str,
     source_lang: str,
@@ -72,29 +89,12 @@ async def translate(
         domain_rules: Optional domain rules.
         similar_examples: Optional similar examples for RAG.
     """
-  
-    
-    requires_llm = False
-    text_lower = text.lower()
-    
-    if brand_context:
-        glossary = brand_context.get("glossary", {})
-        if any(term.lower() in text_lower for term in glossary.keys()):
-            requires_llm = True
-            
-        keywords = brand_context.get("keywords", [])
-        if any(kw.lower() in text_lower for kw in keywords):
-            requires_llm = True
-
-    if not requires_llm and complexity_score >= settings.COMPLEXITY_THRESHOLD:
-        requires_llm = True
-
-    if requires_llm:
+    if routes_to_llm(text, complexity_score, brand_context):
         logger.info(
             "Routing to LLM (complexity=%d/%d, brand_context_match=%s).",
             complexity_score,
             settings.COMPLEXITY_THRESHOLD,
-            requires_llm and complexity_score < settings.COMPLEXITY_THRESHOLD
+            complexity_score < settings.COMPLEXITY_THRESHOLD
         )
         return await translate_with_llm(
             text, source_lang, target_lang, brand_context, domain_rules, similar_examples

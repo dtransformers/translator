@@ -2,6 +2,8 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import AsyncMock
 
+from app.text_translation.schemas import TranslationSource
+
 
 @pytest.mark.asyncio
 async def test_translate_text_missing_fields(client: AsyncClient):
@@ -154,6 +156,7 @@ async def test_translate_text_fresh_response_shape(client: AsyncClient, mocker):
     data = response.json()["data"]
     assert data["complexity_score"] == 12
     assert isinstance(data["complexity_score"], int)
+    assert data["source"] == "machine_translation"
     assert data["cached"] is False
     assert data["skipped"] is False
     assert data["reason"] is None
@@ -190,7 +193,7 @@ async def test_translate_text_cache_hit_uses_stored_complexity(client: AsyncClie
     mocker.patch(
         "app.text_translation.controller.TranslationService.find_cached",
         new_callable=AsyncMock,
-        return_value=cached,
+        return_value=(cached, TranslationSource.EXACT_CACHE),
     )
     complexity = mocker.patch(
         "app.text_translation.controller.calculate_complexity_score",
@@ -206,5 +209,30 @@ async def test_translate_text_cache_hit_uses_stored_complexity(client: AsyncClie
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["cached"] is True
+    assert data["source"] == "exact_cache"
     assert data["complexity_score"] == 37
     complexity.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_translate_text_complex_text_reports_llm_source(client: AsyncClient, mocker):
+    _patch_fresh_pipeline(mocker, AsyncMock(return_value="Bonjour le monde"))
+    mocker.patch(
+        "app.text_translation.controller.calculate_complexity_score",
+        new_callable=AsyncMock,
+        return_value=80,
+    )
+    mocker.patch(
+        "app.text_translation.controller.retrieve_rag_examples",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+
+    response = await client.post("/api/v1/translate", json={
+        "text": "Hello world",
+        "source_lang": "en",
+        "target_lang": "fr",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["data"]["source"] == "llm"

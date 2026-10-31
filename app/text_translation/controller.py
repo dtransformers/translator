@@ -12,9 +12,10 @@ from app.pipeline import (
     is_in_supported_languages,
     calculate_complexity_score,
     translate,
+    routes_to_llm,
     score_translation,
 )
-from app.text_translation.schemas import TranslationRequest, DetectionRequest
+from app.text_translation.schemas import TranslationRequest, DetectionRequest, TranslationSource
 from app.llms import retrieve_rag_examples
 from app.core.config import settings
 from app.pipeline.reviewer import review_translations_batch
@@ -133,7 +134,8 @@ class TextTranslationController:
         if not is_in_supported_languages(source_lang, target_lang):
             return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-        cached = await self.translation_svc.find_cached(text, source_lang, target_lang)
+        cache_hit = await self.translation_svc.find_cached(text, source_lang, target_lang)
+        cached, cache_source = cache_hit if cache_hit else (None, None)
         if cached and cached.trust_score is not None and float(cached.trust_score) >= settings.TRUST_SCORE_THRESHOLD:
             complexity_score = cached.complexity_score
             if complexity_score is None:
@@ -142,6 +144,7 @@ class TextTranslationController:
             return {
                 "message": "Translation retrieved from cache",
                 "translation": cached.translation,
+                "source": cache_source,
                 "cached": True,
                 "score": cached.score,
                 "complexity_score": complexity_score,
@@ -217,6 +220,11 @@ class TextTranslationController:
         return {
             "message": "Translation completed",
             "translation": translation_text,
+            "source": (
+                TranslationSource.LLM
+                if routes_to_llm(text, complexity_score, brand_context)
+                else TranslationSource.MACHINE_TRANSLATION
+            ),
             "score": comet_score,
             "complexity_score": complexity_score,
             "detected_input_lang": detected_input_lang,
