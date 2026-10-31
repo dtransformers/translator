@@ -164,12 +164,17 @@ class TranslationService:
                 return None
 
             if entities:
-                logger.info(
-                    "L3 semantic match (sim=%.4f) but %d entities "
-                    "present — cannot reuse, re-translating",
-                    similarity, len(entities),
-                )
-                return None
+                _, cached_entities = await abstract_entities(l3_hit.value, language=source_lang)
+                # Compare literal entities in source order, not offsets (which shift
+                # with harmless wording edits). Never reuse changed numbers/dates.
+                incoming = [(e["dim"], e["body"]) for e in sorted(entities, key=lambda e: e["start"])]
+                cached = [(e["dim"], e["body"]) for e in sorted(cached_entities, key=lambda e: e["start"])]
+                if incoming != cached:
+                    logger.info(
+                        "L3 semantic match (sim=%.4f) but entities differ — re-translating",
+                        similarity,
+                    )
+                    return None
 
             if _negations(normalized_text, source_lang) != _negations(
                 l3_hit.normalized_text or "", source_lang
