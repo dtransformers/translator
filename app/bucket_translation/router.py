@@ -4,6 +4,7 @@ from typing import Annotated
 
 from app.db.session import get_db
 from app.core.auth import require_auth
+from app.core.readiness import require_ready
 from app.bucket_translation.controller import BucketTranslationController, background_bucket_translation
 from app.bucket_translation.schemas import (
     BucketTranslationRequest,
@@ -13,7 +14,7 @@ from app.bucket_translation.schemas import (
 from app.schemas.base import ApiResponse
 from app.schemas.errors import COMMON_ERRORS
 
-router = APIRouter(dependencies=[Depends(require_auth)])
+router = APIRouter(dependencies=[Depends(require_auth), Depends(require_ready)])
 
 @router.post(
     "/bucket",

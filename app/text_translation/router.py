@@ -4,6 +4,7 @@ from typing import List, Annotated
 
 from app.db.session import get_db, async_session
 from app.core.auth import require_auth
+from app.core.readiness import require_ready
 from app.text_translation.controller import TextTranslationController
 from app.text_translation.schemas import (
     TranslationRequest,
@@ -12,10 +13,10 @@ from app.text_translation.schemas import (
     DetectionData,
 )
 from app.schemas.base import ApiResponse
-from app.schemas.errors import COMMON_ERRORS
+from app.schemas.errors import COMMON_ERRORS, ERROR_502
 
-translation_router = APIRouter(dependencies=[Depends(require_auth)])
-review_router = APIRouter(prefix="/review", dependencies=[Depends(require_auth)], tags=["review"])
+translation_router = APIRouter(dependencies=[Depends(require_auth), Depends(require_ready)])
+review_router = APIRouter(prefix="/review", dependencies=[Depends(require_auth), Depends(require_ready)], tags=["review"])
 debug_router = APIRouter(prefix="/debug", tags=["debug"])
 
 @translation_router.post(
@@ -27,14 +28,14 @@ debug_router = APIRouter(prefix="/debug", tags=["debug"])
         "The pipeline includes:\n"
         "- **Translatability check** — skips emojis, URLs, numbers, HTML\n"
         "- **Multi-tier cache** — exact → normalized → semantic vector lookup\n"
-        "- **Complexity routing** — simple texts use MarianMT, complex texts use LLM\n"
+        "- **Complexity routing** — simple texts use NLLB-200, complex texts use LLM\n"
         "- **Quality scoring** — cosine-similarity-based quality estimation\n"
         "- **Brand context** — optional brand-specific tone, glossary, audience\n"
         "- **Reusable units** — known entity/phrase translations injected as glossary"
     ),
     response_description="Translated text with metadata",
     operation_id="translate_text",
-    responses=COMMON_ERRORS,
+    responses={**COMMON_ERRORS, **ERROR_502},
 )
 async def translate_text_endpoint(
     payload: TranslationRequest,
@@ -46,7 +47,7 @@ async def translate_text_endpoint(
     ctl = TextTranslationController(db)
     result = await ctl.translate_text(payload, brand_uuid=uuid, domain_name=name)
     if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+        raise HTTPException(status_code=result.get("status_code", 400), detail=result["error"])
     return ApiResponse(success=True, data=TranslationData(**result), error=None)
 
 

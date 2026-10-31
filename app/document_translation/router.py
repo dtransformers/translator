@@ -4,12 +4,13 @@ from typing import Annotated
 
 from app.db.session import get_db
 from app.core.auth import require_auth
+from app.core.readiness import require_ready
 from app.document_translation.controller import DocumentTranslationController
 from app.document_translation.schemas import DocumentTranslationRequest, DocumentTranslationData
 from app.schemas.base import ApiResponse
 from app.schemas.errors import COMMON_ERRORS
 
-router = APIRouter(dependencies=[Depends(require_auth)])
+router = APIRouter(dependencies=[Depends(require_auth), Depends(require_ready)])
 
 @router.post(
     "/document",

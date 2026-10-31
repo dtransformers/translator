@@ -47,6 +47,148 @@ class TranslationService:
     async def update(self, translation_id: int, **kwargs) -> Translation | None:
         return await self._repo.update(translation_id, **kwargs)
 
+    async def _find_l1_exact(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str,
+    ) -> Translation | None:
+        exact_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        l1_query = (
+            select(Translation)
+            .where(
+                or_(Translation.value == text, Translation.text_hash == exact_hash),
+                Translation.language == source_lang,
+                Translation.translation_language == target_lang,
+                Translation.is_successed == True,  # noqa: E712
+                Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
+            )
+            .order_by(
+                Translation.is_approved.desc(),
+                Translation.trust_score.desc(),
+                Translation.id.desc(),
+            )
+            .limit(1)
+        )
+        l1_result = await self._db.execute(l1_query)
+        l1_hit = l1_result.scalars().first()
+        if l1_hit:
+            logger.info("L1 Cache Hit (exact) for: %s", text[:30])
+            return l1_hit
+        return None
+
+    async def _find_l2_normalized(
+        self,
+        normalized_text: str,
+        entities: list,
+        source_lang: str,
+        target_lang: str,
+        original_text: str,
+    ) -> Translation | None:
+        norm_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+        l2_query = (
+            select(Translation)
+            .where(
+                Translation.normalized_hash == norm_hash,
+                Translation.language == source_lang,
+                Translation.translation_language == target_lang,
+                Translation.is_successed == True,  # noqa: E712
+                Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
+            )
+            .order_by(
+                Translation.is_approved.desc(),
+                Translation.trust_score.desc(),
+                Translation.id.desc(),
+            )
+            .limit(1)
+        )
+        l2_result = await self._db.execute(l2_query)
+        l2_hit = l2_result.scalars().first()
+        if not l2_hit:
+            return None
+
+        if entities:
+            logger.info(
+                "L2 normalized match found but %d entities present — "
+                "cannot reuse cached translation, re-translating",
+                len(entities),
+            )
+            return None
+
+        logger.info("L2 Cache Hit (normalized) for: %s", original_text[:30])
+        return l2_hit
+
+    async def _find_l3_semantic(
+        self,
+        normalized_text: str,
+        entities: list,
+        source_lang: str,
+        target_lang: str,
+        original_text: str,
+    ) -> Translation | None:
+        try:
+            query_embedding = await asyncio.to_thread(get_embedding, normalized_text)
+            l3_query = (
+                select(
+                    Translation,
+                    Translation.embedding.cosine_distance(query_embedding).label("distance"),
+                )
+                .where(
+                    Translation.language == source_lang,
+                    Translation.translation_language == target_lang,
+                    Translation.is_successed == True,  # noqa: E712
+                    Translation.embedding != None,  # noqa: E711
+                    Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
+                )
+                .order_by("distance")
+                .limit(1)
+            )
+            l3_result = await self._db.execute(l3_query)
+            l3_row = l3_result.first()
+            if l3_row is None:
+                return None
+
+            l3_hit, distance = l3_row[0], l3_row[1]
+            similarity = 1.0 - distance
+            logger.info(
+                "L3 Semantic candidate for '%s': distance=%.4f, similarity=%.4f",
+                original_text[:30], distance, similarity,
+            )
+
+            if distance > settings.SEMANTIC_CACHE_MAX_DISTANCE:
+                logger.info(
+                    "L3 below threshold (distance=%.4f > %.4f), skipping cache",
+                    distance, settings.SEMANTIC_CACHE_MAX_DISTANCE,
+                )
+                return None
+
+            if entities:
+                logger.info(
+                    "L3 semantic match (sim=%.4f) but %d entities "
+                    "present — cannot reuse, re-translating",
+                    similarity, len(entities),
+                )
+                return None
+
+            if _negations(normalized_text, source_lang) != _negations(
+                l3_hit.normalized_text or "", source_lang
+            ):
+                logger.info(
+                    "L3 semantic match (sim=%.4f) but negation differs — re-translating",
+                    similarity,
+                )
+                return None
+
+            logger.info(
+                "L3 Cache Hit (semantic, sim=%.4f) for: %s",
+                similarity, original_text[:30],
+            )
+            return l3_hit
+
+        except Exception as e:
+            logger.warning("L3 Semantic cache failed: %s", e)
+            return None
+
     async def find_cached(
         self,
         text: str,
@@ -65,107 +207,22 @@ class TranslationService:
             return None
 
         # --- L1: Exact match ---
-        exact_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-        l1_query = (
-            select(Translation)
-            .where(
-                or_(Translation.value == text, Translation.text_hash == exact_hash),
-                Translation.language == source_lang,
-                Translation.translation_language == target_lang,
-                Translation.is_successed == True,  # noqa: E712
-            )
-            .order_by(Translation.is_approved.desc())
-        )
-        l1_result = await self._db.execute(l1_query)
-        l1_hit = l1_result.scalars().first()
-        if l1_hit:
-            logger.info("L1 Cache Hit (exact) for: %s", text[:30])
+        if l1_hit := await self._find_l1_exact(text, source_lang, target_lang):
             return l1_hit
 
         # --- L2: Normalized hash ---
         abstracted_text, entities = await abstract_entities(text, language=source_lang)
         normalized_text = canonicalize_text(abstracted_text)
-        norm_hash = hashlib.sha256(normalized_text.encode('utf-8')).hexdigest()
 
-        l2_query = (
-            select(Translation)
-            .where(
-                Translation.normalized_hash == norm_hash,
-                Translation.language == source_lang,
-                Translation.translation_language == target_lang,
-                Translation.is_successed == True,  # noqa: E712
-            )
-            .order_by(Translation.is_approved.desc())
+        if l2_hit := await self._find_l2_normalized(
+            normalized_text, entities, source_lang, target_lang, text
+        ):
+            return l2_hit
+
+        # --- L3: Semantic match ---
+        return await self._find_l3_semantic(
+            normalized_text, entities, source_lang, target_lang, text
         )
-        l2_result = await self._db.execute(l2_query)
-        l2_hit = l2_result.scalars().first()
-        if l2_hit:
-            if not entities:
-                logger.info("L2 Cache Hit (normalized) for: %s", text[:30])
-                return l2_hit
-            else:
-                logger.info(
-                    "L2 normalized match found but %d entities present — "
-                    "cannot reuse cached translation, re-translating",
-                    len(entities),
-                )
-        try:
-            query_embedding = await asyncio.to_thread(get_embedding, normalized_text)
-            l3_query = (
-                select(
-                    Translation,
-                    Translation.embedding.cosine_distance(query_embedding).label("distance"),
-                )
-                .where(
-                    Translation.language == source_lang,
-                    Translation.translation_language == target_lang,
-                    Translation.is_successed == True,  
-                    Translation.embedding != None, 
-                    Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
-                )
-                .order_by("distance")
-                .limit(1)
-            )
-            l3_result = await self._db.execute(l3_query)
-            l3_row = l3_result.first()
-
-            if l3_row is not None:
-                l3_hit, distance = l3_row[0], l3_row[1]
-                similarity = 1.0 - distance
-                logger.info(
-                    "L3 Semantic candidate for '%s': distance=%.4f, similarity=%.4f",
-                    text[:30], distance, similarity,
-                )
-                if distance <= settings.SEMANTIC_CACHE_MAX_DISTANCE:
-                    if entities:
-                        logger.info(
-                            "L3 semantic match (sim=%.4f) but %d entities "
-                            "present — cannot reuse, re-translating",
-                            similarity, len(entities),
-                        )
-                    elif _negations(normalized_text, source_lang) != _negations(
-                        l3_hit.normalized_text or "", source_lang
-                    ):
-                        logger.info(
-                            "L3 semantic match (sim=%.4f) but negation differs — re-translating",
-                            similarity,
-                        )
-                    else:
-                        logger.info(
-                            "L3 Cache Hit (semantic, sim=%.4f) for: %s",
-                            similarity, text[:30],
-                        )
-                        return l3_hit
-                else:
-                    logger.info(
-                        "L3 below threshold (distance=%.4f > %.4f), skipping cache",
-                        distance, settings.SEMANTIC_CACHE_MAX_DISTANCE,
-                    )
-        except Exception as e:
-            logger.warning("L3 Semantic cache failed: %s", e)
-
-        return None
 
     async def save_with_cache_fields(self, **kwargs) -> Translation:
         text = kwargs.get("value")

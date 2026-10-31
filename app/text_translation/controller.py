@@ -1,4 +1,3 @@
-from bokeh.core.property.any import Any
 import time
 import logging
 import re
@@ -134,9 +133,12 @@ class TextTranslationController:
         if not is_in_supported_languages(source_lang, target_lang):
             return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-        cached: Any = await self.translation_svc.find_cached(text, source_lang, target_lang)
+        cached = await self.translation_svc.find_cached(text, source_lang, target_lang)
         if cached and cached.trust_score is not None and float(cached.trust_score) >= settings.TRUST_SCORE_THRESHOLD:
-            complexity_score = await calculate_complexity_score(text)
+            complexity_score = cached.complexity_score
+            if complexity_score is None:
+                brand_context, domain_rules = await self._compile_context(brand_uuid, domain_name, text, target_lang)
+                complexity_score = await calculate_complexity_score(text, brand_context, domain_rules)
             return {
                 "message": "Translation retrieved from cache",
                 "translation": cached.translation,
@@ -209,8 +211,11 @@ class TextTranslationController:
             property=property_name,
         )
 
+        if not is_successed:
+            return {"error": f"Translation failed: {notes}", "status_code": 502}
+
         return {
-            "message": "Translation completed" if is_successed else f"Translation failed: {notes}",
+            "message": "Translation completed",
             "translation": translation_text,
             "score": comet_score,
             "complexity_score": complexity_score,

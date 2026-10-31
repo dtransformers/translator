@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 
 from app.main import app
 from app.db.session import get_db
+from app.core.readiness import require_ready
 
 
 class MockAsyncSession:
@@ -29,6 +30,7 @@ async def client(mock_db_session) -> AsyncGenerator[AsyncClient, None]:
         yield mock_db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[require_ready] = lambda: None
 
     from httpx import ASGITransport
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", auth=TEST_AUTH) as ac:

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     TRUST_SCORE_THRESHOLD: float = 0.85
     SEMANTIC_CACHE_MAX_DISTANCE: float = 0.02
 
+    # Readiness monitor
+    READINESS_CHECK_INTERVAL: int = 20
+    READINESS_CHECK_TIMEOUT: float = 5.0
+
     # S3 / MinIO
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
