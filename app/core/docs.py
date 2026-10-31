@@ -7,14 +7,14 @@ API_DESCRIPTION = """A modular FastAPI application for high-quality, context-awa
 
 - **Multi-engine translation** — NLLB-200 for simple texts, LLM (Gemini / Ollama / OpenRouter) for complex texts
 - **Multi-tier semantic caching** — exact → normalized → vector similarity lookup
-- **Brand context injection** — tone, glossary, audience, entities
+- **LLM context** — industry, summary, glossary, domain rules, and retrieved examples
 - **Reusable translation units** — known phrases/entities auto-injected as glossary
-- **Quality estimation** — cosine-similarity-based scoring
+- **Text quality estimation** — multilingual-e5 cosine similarity
 - **Language detection** — automatic source-language identification
 
 ## Authentication
 
-All endpoints (except `/health`) require **HTTP Basic Authentication**. Include an `Authorization: Basic <base64(username:password)>` header with every request.
+Translation, document, bucket, review, brand, and domain endpoints require **HTTP Basic Authentication**. Health endpoints, generated documentation, and the current debug database route do not require authentication.
 """
 
 OPENAPI_TAGS = [
@@ -26,8 +26,8 @@ OPENAPI_TAGS = [
         "name": "translation",
         "description": (
             "Core translation endpoints. Supports text translation, language "
-            "detection, and document translation through a multi-stage pipeline "
-            "(verification → caching → complexity routing → MarianMT / LLM → "
+            "detection. Text translation uses a multi-stage pipeline "
+            "(verification → caching → context and complexity routing → NLLB-200 / LLM → "
             "quality scoring)."
         ),
     },
@@ -35,8 +35,8 @@ OPENAPI_TAGS = [
         "name": "brands",
         "description": (
             "Brand profile management (CRUD). Brand profiles inject domain-specific "
-            "context — industry, tone, audience, glossary, named entities — into "
-            "the LLM translation pipeline for brand-aligned output."
+            "context. The active draft prompt consumes industry, summary, and glossary; "
+            "keyword/glossary matches influence routing."
         ),
     },
 ]

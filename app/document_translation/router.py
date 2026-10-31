@@ -17,9 +17,11 @@ router = APIRouter(dependencies=[Depends(require_auth), Depends(require_ready)])
     response_model=ApiResponse[DocumentTranslationData],
     summary="Translate document",
     description=(
-        "Submit a document URL for translation. The document will be fetched, "
-        "parsed, and each translatable segment processed through the translation "
-        "pipeline.\n\n"
+        "Fetch JSON from a URL and preserve its AST structure. Simple nodes use "
+        "the text pipeline; complex or brand-matched nodes use one structured LLM "
+        "batch with retrieved semantic examples. The batch bypasses per-node cache "
+        "reuse, quality scoring, and persistence. Failed segments retain their "
+        "original text, so completion does not guarantee every value was translated."
     ),
     response_description="Document translation status",
     operation_id="translate_document",
@@ -28,7 +30,7 @@ router = APIRouter(dependencies=[Depends(require_auth), Depends(require_ready)])
 async def document_endpoint(
     payload: DocumentTranslationRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    uuid: Annotated[str | None, Query(description="Optional Brand UUID for tone and glossary context")] = None,
+    uuid: Annotated[str | None, Query(description="Optional Brand UUID for translation context")] = None,
     name: Annotated[str | None, Query(description="Optional Domain name to apply rules")] = None,
 ):
     brand_uuid = payload.brand_uuid or uuid

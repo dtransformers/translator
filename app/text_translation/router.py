@@ -28,9 +28,10 @@ debug_router = APIRouter(prefix="/debug", tags=["debug"])
         "The pipeline includes:\n"
         "- **Translatability check** — skips emojis, URLs, numbers, HTML\n"
         "- **Multi-tier cache** — exact → normalized → semantic vector lookup\n"
-        "- **Complexity routing** — simple texts use NLLB-200, complex texts use LLM\n"
+        "- **Routing** — glossary/keyword matches or complexity at the configured threshold use LLM; other texts use NLLB-200\n"
+        "- **Semantic examples** — LLM routes retrieve similar translations as prompt context; this is separate from cache reuse\n"
         "- **Quality scoring** — cosine-similarity-based quality estimation\n"
-        "- **Brand context** — optional brand-specific tone, glossary, audience\n"
+        "- **LLM context** — industry, summary, glossary, and domain rules\n"
         "- **Reusable units** — known entity/phrase translations injected as glossary"
     ),
     response_description="Translated text with metadata",

@@ -1,57 +1,84 @@
-# Translator Module
+# Translator
 
-We are building a highly scalable, Google Translation API-compatible service. This service provides intelligent translation for multiple language pairs, with built-in quality estimation, database caching, brand integration, and an offline reviewer system.
+A FastAPI translation service with local NLLB-200 inference, configurable LLM providers, PostgreSQL/pgvector caching, and JSON document processing. Supported API language pairs are English ↔ French, Spanish, Arabic, and Chinese (`en` ↔ `fr`, `es`, `ar`, `zh`).
 
-## 🚀 Key Features
-- **Intelligent Pre-processing:** Automatically skips translation for emojis, links, numbers, and HTML tags.
-- **Brand Name Protection:** Preserves your exact brand name across translations by using variable placeholder injection (`{{BRAND_NAME}}`).
-- **Language Detection:** Uses `langdetect` to verify source languages.
-- **Complexity Routing:** Computes text readability and complexity. Simple text uses fast local models; complex text leverages LLM integration for contextual and nuanced translations.
-- **Machine Translation:** Powered by Hugging Face `MarianMT` (Helsinki-NLP) models.
-- **LLM Translation Integration:** Automatically routes highly complex or context-heavy JSON structures to the LLM backend.
-- **Quality Estimation:** Scores every translation natively using cross-lingual semantic similarity (`sentence-transformers`).
-- **Caching Layer:** Exact translations (scoring >= 85%) are automatically cached and retrieved from PostgreSQL to save compute.
-- **S3 Bucket Processing:** Asynchronously translates entire directories of JSON documents stored in AWS S3 or MinIO.
-- **Offline Reviewer Module:** Automatically scans the translation cache database in the background to fix translations with high complexity and low trust scores using the LLM backend.
+## Translation process
 
----
+For a text request, the service:
 
-## 🏗️ Architecture Pipeline
+1. Skips non-translatable input and records the skip; otherwise detects the source language and checks the requested language pair.
+2. Searches trusted translations in order: **exact → normalized → semantic**. An accepted hit returns immediately.
+3. On a miss, builds brand/reusable-unit/domain context and calculates complexity.
+4. Uses the LLM for a glossary/keyword match or complexity at or above `COMPLEXITY_THRESHOLD` (default **28**). Other inputs use `facebook/nllb-200-3.3B`.
+5. For LLM translation, retrieves similar stored translations as prompt examples (RAG).
+6. Scores the result with `intfloat/multilingual-e5-large` and saves the translation, metadata, source hashes, and source embedding.
 
-Once we receive an input text via the API, it passes through the following strict, step-by-step pipeline:
+**Semantic cache reuse and RAG are separate operations.** A cache hit returns an existing translation with `source: "semantic_cache"`. RAG provides examples to a new LLM generation, whose source remains `"llm"`. Both NLLB and LLM results saved by the text pipeline can become cache candidates.
 
-### 1. Verification Step
-Before invoking any heavy translation models, the input is validated and verified:
-- **Translatability Check:** Checks if the input is actually translatable (Links, Emojis, Numbers, Currency Symbols, HTML tags, etc.).
-- **Source/Target Compatibility:** Automatically detects the input language using `langdetect` to verify it matches the requested source language.
-- **Language Supported:** Validates that the requested source and target languages are within our supported pairs.
-- **Cache Check:** Queries the PostgreSQL database. If this exact text was translated before with a high trust score (>=85%), we return the cached result immediately.
+## Entry points
 
-### 2. Context Integration Step
-- **Brand Context:** If a `brand_uuid` is supplied, the pipeline extracts the brand's industry, tone, target audience, and glossary.
-- **Brand Protection:** The brand's exact name is wrapped in a `{{BRAND_NAME}}` placeholder so the translation engine avoids localizing the brand name.
+| Entry point | Processing |
+| --- | --- |
+| `POST /api/v1/translate` | Full text pipeline, including cache lookup and result persistence |
+| `POST /api/v1/document` | Fetch JSON, build an AST, send simple nodes through the text pipeline and complex/brand-matched nodes through one LLM batch |
+| `POST /api/v1/bucket` | Start background S3/MinIO JSON processing; reuse unchanged files or translate each node through the text pipeline |
+| `POST /api/v1/detect` | Source-language detection |
+| `POST /api/v1/review/start` | Start one background review of stored translations |
 
-### 3. Complexity Step
-- If the text is valid and not cached, we calculate a complexity score from 1-100. This is done using a mix of NLP heuristics (token length, vocabulary diversity, and Flesch reading ease). 
+Document LLM batches retrieve semantic examples but currently bypass per-node cache reuse, quality scoring, and persistence. Document/bucket segment failures retain original text; successful document structure validation does not mean every segment was translated.
 
-### 4. Translation Step
-- **Simple Inputs (Score < 50):** The text is passed to our local, fast Machine Translation model (`MarianMT` / `Helsinki-NLP`).
-- **Complex Inputs (Score >= 50):** The text is routed through an LLM sequence using native JSON-schema constrained output (Gemini, Ollama or OpenRouter) with strict Pydantic validation and follow your specific brand guidelines.
+## Run locally
 
-### 5. Quality Estimation & Return Step
-- **Quality Scoring:** The generated translation is scored alongside the source text using a reference-free, cross-lingual semantic similarity model. This gives us a confidence/quality score between 0.0 and 1.0.
-- **Database Storage:** The original text, translated text, detected languages, translation time, and the quality score are all stored in the database.
+Use Python 3.10 or newer and install the dependencies:
 
-### 6. Reviewer Module
-- An asynchronous backend process (`/api/v1/review/start`) regularly audits the database. Any cached translation that falls below an 85% trust score while having a high complexity score is sent back through an LLM `fix_translation` prompt to automatically improve the cache over time.
+```sh
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
 
----
+Edit `.env`: configure PostgreSQL credentials, Duckling, API credentials, and your LLM provider/model. The selected LLM must support native JSON-schema structured output. `GEMINI_API_KEY` must be present in the configuration even for other providers; it may be empty when unused.
 
-## 🛠️ Configuration
+Start the bundled database and entity parser, then the API:
 
-You can control how the heavy machine learning models are loaded via the `.env` file:
+```sh
+docker compose up -d db duckling
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-- `IS_DYNAMIC_LOADING=true` (Default): Models are loaded into RAM *on-demand* the first time a specific language pair is requested. This allows the app to start up instantly.
-- `IS_DYNAMIC_LOADING=false`: The application will download and load **all** supported language models during startup. *(Note: This can take several minutes and gigabytes of RAM during the first boot, but ensures zero latency on the first request).*
+For this host-run setup, use `POSTGRES_HOST=127.0.0.1` and `DUCKLING_URL=http://127.0.0.1:8001/parse`. Set a nonempty database password that matches the database container. When running the API in Docker instead, use `POSTGRES_HOST=db` and an LLM address reachable from that container.
 
-LLM translations explicitly use `with_structured_output(..., method="json_schema")`. Single-text output requires a `translation` string; JSON batches require exactly the input keys with string values and forbid extra fields. Invalid outputs raise errors instead of returning raw text or an empty batch. The configured model/server must support native structured output; there is no prompt-only fallback. Schema enforcement does not guarantee translation meaning or placeholder preservation.
+The server starts before model loading completes. Wait for `GET /health` to return 200 before translating; gated routes return 503 while dependencies are unavailable. Initial model downloads can take time and substantial memory. `GET /health/live` only checks that the process is serving.
+
+Interactive API documentation is at `/docs`, with ReDoc at `/redoc` and the generated contract at `/openapi.json`. Translation endpoints require HTTP Basic authentication:
+
+```sh
+curl -u "$API_USERNAME:$API_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Hello world","source_lang":"en","target_lang":"fr"}' \
+  http://127.0.0.1:8000/api/v1/translate
+```
+
+Set those shell variables to your configured API credentials; `.env` is loaded by the application, not automatically by the shell. Text responses use `{ "success": true, "data": { ... }, "error": null }`. The `data.source` value is `llm`, `machine_translation`, `exact_cache`, `normalized_cache`, or `semantic_cache`; skipped input has a null source.
+
+## Configuration defaults
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `COMPLEXITY_THRESHOLD` | `28` | Minimum score for complexity-based LLM routing |
+| `COMPLEXITY_LLM_WINDOW` | `8` | Near-threshold window for an LLM complexity rating |
+| `TRUST_SCORE_THRESHOLD` | `0.85` | Minimum stored trust for cache reuse |
+| `SEMANTIC_CACHE_MAX_DISTANCE` | `0.02` | Maximum cosine distance for semantic reuse |
+| `READINESS_CHECK_INTERVAL` | `20` | Seconds between readiness cycles |
+| `READINESS_CHECK_TIMEOUT` | `5.0` | HTTP readiness-check timeout in seconds |
+
+`.env` can override these defaults. LLM providers are `gemini`, `ollama`, and `openrouter`. Model loading is managed by readiness; `IS_DYNAMIC_LOADING` is not a current setting.
+
+## Documentation and checks
+
+- [Architecture and design](docs/architecture.md): components, routing, cache rules, RAG, document/bucket behavior, and implementation limits.
+- [Operations and troubleshooting](docs/operations.md): readiness, logs, cache diagnosis, review, and verification.
+- [Documentation index](docs/README.md): current guides and historical design records.
+
+Run the local test suite with `python -m pytest -q`. Tests use dependency doubles for many external boundaries; passing tests do not establish live provider or database availability.
