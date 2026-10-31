@@ -23,8 +23,10 @@ pytest-mock
 pgvector
 sentence-transformers
 langchain-ollama
+langchain-openai
 boto3
 typer
 aiofiles
 wordfreq
 pytest-cov
+protobuf

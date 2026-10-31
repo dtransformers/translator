@@ -1,4 +1,5 @@
 import logging
+import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,13 @@ class NLLBService:
         
         self.model_name = "facebook/nllb-200-3.3B"
 
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
+
     def preload_models(self):
         logger.info(f"Preloading NLLB model {self.model_name} (this may take a while)...")
         self._load_model()
@@ -28,8 +36,9 @@ class NLLBService:
         if self.model is None or self.tokenizer is None:
             logger.info(f"Loading tokenizer and model for {self.model_name}...")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
-            logger.info(f"Model {self.model_name} loaded successfully.")
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name).to(self.device)
+            self.model.eval()
+            logger.info(f"Model {self.model_name} loaded successfully on {self.device}.")
 
     def translate_text(self, text: str, source_lang: str, target_lang: str) -> str:
         if source_lang not in self.lang_mapping:
@@ -51,11 +60,12 @@ class NLLBService:
         # Set the source language for the tokenizer
         tokenizer.src_lang = src_lang_flores
 
-        inputs = tokenizer(text, return_tensors="pt", padding=True)
-        translated_tokens = model.generate(
-            **inputs, 
-            forced_bos_token_id=tokenizer.lang_code_to_id[tgt_lang_flores]
-        )
+        inputs = tokenizer(text, return_tensors="pt", padding=True).to(self.device)
+        with torch.inference_mode():
+            translated_tokens = model.generate(
+                **inputs,
+                forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang_flores)
+            )
         translated_text = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
         
         return translated_text

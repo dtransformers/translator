@@ -36,7 +36,7 @@ Before invoking any heavy translation models, the input is validated and verifie
 
 ### 4. Translation Step
 - **Simple Inputs (Score < 50):** The text is passed to our local, fast Machine Translation model (`MarianMT` / `Helsinki-NLP`).
-- **Complex Inputs (Score >= 50):** The text is routed through an LLM sequence using structured generation prompts that preserve structural integrity (e.g. JSON Arrays) and follow your specific brand guidelines.
+- **Complex Inputs (Score >= 50):** The text is routed through an LLM sequence using native JSON-schema constrained output (Gemini, Ollama or OpenRouter) with strict Pydantic validation and follow your specific brand guidelines.
 
 ### 5. Quality Estimation & Return Step
 - **Quality Scoring:** The generated translation is scored alongside the source text using a reference-free, cross-lingual semantic similarity model. This gives us a confidence/quality score between 0.0 and 1.0.
@@ -53,3 +53,5 @@ You can control how the heavy machine learning models are loaded via the `.env` 
 
 - `IS_DYNAMIC_LOADING=true` (Default): Models are loaded into RAM *on-demand* the first time a specific language pair is requested. This allows the app to start up instantly.
 - `IS_DYNAMIC_LOADING=false`: The application will download and load **all** supported language models during startup. *(Note: This can take several minutes and gigabytes of RAM during the first boot, but ensures zero latency on the first request).*
+
+LLM translations explicitly use `with_structured_output(..., method="json_schema")`. Single-text output requires a `translation` string; JSON batches require exactly the input keys with string values and forbid extra fields. Invalid outputs raise errors instead of returning raw text or an empty batch. The configured model/server must support native structured output; there is no prompt-only fallback. Schema enforcement does not guarantee translation meaning or placeholder preservation.

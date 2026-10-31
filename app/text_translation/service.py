@@ -11,8 +11,25 @@ from app.text_translation.models import Translation, ReusableUnit
 from app.text_translation.repository import TranslationRepository, ReusableUnitRepository
 from app.pipeline.normalization import canonicalize_text, abstract_entities
 from app.pipeline.embeddings import get_embedding
+from app.core.config import settings
+from app.text_translation.schemas import TranslationSource
 
 logger = logging.getLogger(__name__)
+
+# Embeddings barely separate "free" from "not free", so a semantic match is
+# only reused when both texts carry the same negation words.
+NEGATION_WORDS = {
+    "en": {"not", "no", "never", "none", "nothing", "nobody", "neither", "nor", "without",
+           "cannot", "cant", "dont", "doesnt", "didnt", "isnt", "arent", "wasnt", "werent",
+           "wont", "wouldnt", "shouldnt", "couldnt", "hasnt", "havent", "hadnt"},
+    "fr": {"ne", "pas", "jamais", "aucun", "aucune", "rien", "personne", "sans", "ni"},
+    "es": {"no", "nunca", "jamás", "ningún", "ninguno", "ninguna", "nada", "nadie", "sin", "ni"},
+}
+
+
+def _negations(normalized_text: str, lang: str) -> set[str]:
+    words = NEGATION_WORDS.get(lang, set())
+    return {w for w in normalized_text.split() if w in words}
 
 class TranslationService:
     def __init__(self, db: AsyncSession):
@@ -31,26 +48,13 @@ class TranslationService:
     async def update(self, translation_id: int, **kwargs) -> Translation | None:
         return await self._repo.update(translation_id, **kwargs)
 
-    async def find_cached(
+    async def _find_l1_exact(
         self,
         text: str,
         source_lang: str,
         target_lang: str,
     ) -> Translation | None:
-        """
-        Multi-tier cache lookup:
-          L1 — exact text / SHA-256 hash match
-          L2 — normalized + entity-abstracted hash match
-          L3 — semantic vector similarity (pgvector cosine distance)
-
-        Returns the best matching approved Translation, or None.
-        """
-        if not text:
-            return None
-
-        # --- L1: Exact match ---
         exact_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-
         l1_query = (
             select(Translation)
             .where(
@@ -58,20 +62,31 @@ class TranslationService:
                 Translation.language == source_lang,
                 Translation.translation_language == target_lang,
                 Translation.is_successed == True,  # noqa: E712
+                Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
             )
-            .order_by(Translation.is_approved.desc())
+            .order_by(
+                Translation.is_approved.desc(),
+                Translation.trust_score.desc(),
+                Translation.id.desc(),
+            )
+            .limit(1)
         )
         l1_result = await self._db.execute(l1_query)
         l1_hit = l1_result.scalars().first()
         if l1_hit:
             logger.info("L1 Cache Hit (exact) for: %s", text[:30])
             return l1_hit
+        return None
 
-        # --- L2: Normalized hash ---
-        abstracted_text, entities = await abstract_entities(text, language=source_lang)
-        normalized_text = canonicalize_text(abstracted_text)
-        norm_hash = hashlib.sha256(normalized_text.encode('utf-8')).hexdigest()
-
+    async def _find_l2_normalized(
+        self,
+        normalized_text: str,
+        entities: list,
+        source_lang: str,
+        target_lang: str,
+        original_text: str,
+    ) -> Translation | None:
+        norm_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
         l2_query = (
             select(Translation)
             .where(
@@ -79,22 +94,39 @@ class TranslationService:
                 Translation.language == source_lang,
                 Translation.translation_language == target_lang,
                 Translation.is_successed == True,  # noqa: E712
+                Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
             )
-            .order_by(Translation.is_approved.desc())
+            .order_by(
+                Translation.is_approved.desc(),
+                Translation.trust_score.desc(),
+                Translation.id.desc(),
+            )
+            .limit(1)
         )
         l2_result = await self._db.execute(l2_query)
         l2_hit = l2_result.scalars().first()
-        if l2_hit:
-            if not entities:
-                logger.info("L2 Cache Hit (normalized) for: %s", text[:30])
-                return l2_hit
-            else:
-                logger.info(
-                    "L2 normalized match found but %d entities present — "
-                    "cannot reuse cached translation, re-translating",
-                    len(entities),
-                )
-        SEMANTIC_DISTANCE_THRESHOLD = 0.08
+        if not l2_hit:
+            return None
+
+        if entities:
+            logger.info(
+                "L2 normalized match found but %d entities present — "
+                "cannot reuse cached translation, re-translating",
+                len(entities),
+            )
+            return None
+
+        logger.info("L2 Cache Hit (normalized) for: %s", original_text[:30])
+        return l2_hit
+
+    async def _find_l3_semantic(
+        self,
+        normalized_text: str,
+        entities: list,
+        source_lang: str,
+        target_lang: str,
+        original_text: str,
+    ) -> Translation | None:
         try:
             query_embedding = await asyncio.to_thread(get_embedding, normalized_text)
             l3_query = (
@@ -105,43 +137,99 @@ class TranslationService:
                 .where(
                     Translation.language == source_lang,
                     Translation.translation_language == target_lang,
-                    Translation.is_successed == True,  
-                    Translation.embedding != None, 
+                    Translation.is_successed == True,  # noqa: E712
+                    Translation.embedding != None,  # noqa: E711
+                    Translation.trust_score >= settings.TRUST_SCORE_THRESHOLD,
                 )
                 .order_by("distance")
                 .limit(1)
             )
             l3_result = await self._db.execute(l3_query)
             l3_row = l3_result.first()
+            if l3_row is None:
+                return None
 
-            if l3_row is not None:
-                l3_hit, distance = l3_row[0], l3_row[1]
-                similarity = 1.0 - distance
+            l3_hit, distance = l3_row[0], l3_row[1]
+            similarity = 1.0 - distance
+            logger.info(
+                "L3 Semantic candidate for '%s': distance=%.4f, similarity=%.4f",
+                original_text[:30], distance, similarity,
+            )
+
+            if distance > settings.SEMANTIC_CACHE_MAX_DISTANCE:
                 logger.info(
-                    "L3 Semantic candidate for '%s': distance=%.4f, similarity=%.4f",
-                    text[:30], distance, similarity,
+                    "L3 below threshold (distance=%.4f > %.4f), skipping cache",
+                    distance, settings.SEMANTIC_CACHE_MAX_DISTANCE,
                 )
-                if distance <= SEMANTIC_DISTANCE_THRESHOLD:
-                    if entities:
-                        logger.info(
-                            "L3 semantic match (sim=%.4f) but %d entities "
-                            "present — cannot reuse, re-translating",
-                            similarity, len(entities),
-                        )
-                    else:
-                        logger.info(
-                            "L3 Cache Hit (semantic, sim=%.4f) for: %s",
-                            similarity, text[:30],
-                        )
-                        return l3_hit
-                else:
+                return None
+
+            if entities:
+                _, cached_entities = await abstract_entities(l3_hit.value, language=source_lang)
+                # Compare literal entities in source order, not offsets (which shift
+                # with harmless wording edits). Never reuse changed numbers/dates.
+                incoming = [(e["dim"], e["body"]) for e in sorted(entities, key=lambda e: e["start"])]
+                cached = [(e["dim"], e["body"]) for e in sorted(cached_entities, key=lambda e: e["start"])]
+                if incoming != cached:
                     logger.info(
-                        "L3 below threshold (sim=%.4f < 0.92), skipping cache",
+                        "L3 semantic match (sim=%.4f) but entities differ — re-translating",
                         similarity,
                     )
+                    return None
+
+            if _negations(normalized_text, source_lang) != _negations(
+                l3_hit.normalized_text or "", source_lang
+            ):
+                logger.info(
+                    "L3 semantic match (sim=%.4f) but negation differs — re-translating",
+                    similarity,
+                )
+                return None
+
+            logger.info(
+                "L3 Cache Hit (semantic, sim=%.4f) for: %s",
+                similarity, original_text[:30],
+            )
+            return l3_hit
+
         except Exception as e:
             logger.warning("L3 Semantic cache failed: %s", e)
+            return None
 
+    async def find_cached(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str,
+    ) -> tuple[Translation, TranslationSource] | None:
+        """
+        Multi-tier cache lookup:
+          L1 — exact text / SHA-256 hash match
+          L2 — normalized + entity-abstracted hash match
+          L3 — semantic vector similarity (pgvector cosine distance)
+
+        Returns the best matching trusted Translation and the tier that matched, or None.
+        """
+        if not text:
+            return None
+
+        # --- L1: Exact match ---
+        if l1_hit := await self._find_l1_exact(text, source_lang, target_lang):
+            return l1_hit, TranslationSource.EXACT_CACHE
+
+        # --- L2: Normalized hash ---
+        abstracted_text, entities = await abstract_entities(text, language=source_lang)
+        normalized_text = canonicalize_text(abstracted_text)
+
+        if l2_hit := await self._find_l2_normalized(
+            normalized_text, entities, source_lang, target_lang, text
+        ):
+            return l2_hit, TranslationSource.NORMALIZED_CACHE
+
+        # --- L3: Semantic match ---
+        if l3_hit := await self._find_l3_semantic(
+            normalized_text, entities, source_lang, target_lang, text
+        ):
+            return l3_hit, TranslationSource.SEMANTIC_CACHE
         return None
 
     async def save_with_cache_fields(self, **kwargs) -> Translation:

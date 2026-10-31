@@ -1,5 +1,11 @@
-import json
-from typing import Dict, Any, List
+"""
+Prompt templates for every LLM call.
+
+Each prompt pairs with a schema in app.llms.schemas and must be run through
+llm.with_structured_output(<schema>, method="json_schema"), so the output
+shape is enforced by the provider rather than described in the prompt text.
+"""
+from typing import Dict, Any
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
 def get_summary_prompt() -> ChatPromptTemplate:
@@ -12,6 +18,9 @@ Constraints:
 - One short paragraph
 - No explanations
 - No formatting
+
+Output:
+Put the paragraph in the summary field.
 
 Input:
 File: {filename}
@@ -29,31 +38,19 @@ Extract translation context.
 
 Output language for VALUES: {target_language}
 
-JSON SCHEMA:
-{{
-  "industry": "string",
-  "tone": "string",
-  "audience": "string",
-  "keywords": ["string"],
-  "entities": ["string"],
-  "glossary": {{"source_term": "target_term"}}
-}}
-
 Rules:
-- Output ONLY valid JSON
-- No extra text
 - All values MUST be in {target_language}
 - Keep fields short and precise
+- entities: names that must not be translated (brands, products, services)
+- glossary: domain terms with the translation that must be used for each
 
-Example:
-{{
-  "industry": "Restaurant SaaS",
-  "tone": "Professional and friendly",
-  "audience": "Restaurant owners",
-  "keywords": ["POS", "orders"],
-  "entities": ["Stripe"],
-  "glossary": {{"order": "commande"}}
-}}
+Example (French target):
+- industry: Restaurant SaaS
+- tone: Professional and friendly
+- audience: Restaurant owners
+- keywords: POS, orders
+- entities: Stripe
+- glossary: order -> commande
 
 Input:
 File: {filename}
@@ -73,19 +70,7 @@ Merge multiple file contexts into ONE global context.
 
 Output language: {target_language}
 
-JSON SCHEMA:
-{{
-  "industry": "string",
-  "tone": "string",
-  "audience": "string",
-  "keywords": ["string"],
-  "entities": ["string"],
-  "glossary": {{"source_term": "target_term"}},
-  "summary": "string"
-}}
-
 Rules:
-- Output ONLY valid JSON
 - Merge duplicates
 - Keep consistency
 - All values in {target_language}
@@ -98,7 +83,7 @@ Input:
 def get_translation_draft_prompt() -> ChatPromptTemplate:
     system_msg = SystemMessagePromptTemplate.from_template("You are a professional translation engine.")
     human_msg = HumanMessagePromptTemplate.from_template("""Task:
-Translate the following list of strings from {source_language} to {target_language}.
+Translate the following texts from {source_language} to {target_language}.
 
 Context:
 - Industry: {industry}
@@ -120,10 +105,7 @@ Similar Translation Examples (Reference only):
 {rag_examples}
 
 Output:
-Return ONLY a raw JSON array of translated strings.
-
-Example:
-["translated_text_1", "translated_text_2"]
+{output_instructions}
 
 Texts:
 {texts}""")
@@ -153,24 +135,10 @@ Rules:
 - If the draft is already excellent, keep it as is.
 
 Output:
-Return ONLY a raw JSON array of refined strings.
+Put the refined strings in the translations field, one per draft, in the same order as the input.
 
 Input (Draft Translations):
 {draft_translations}""")
-    return ChatPromptTemplate.from_messages([system_msg, human_msg])
-
-
-def get_json_repair_prompt() -> ChatPromptTemplate:
-    system_msg = SystemMessagePromptTemplate.from_template("You are a JSON repair tool.")
-    human_msg = HumanMessagePromptTemplate.from_template("""Fix the output to be valid JSON.
-
-Rules:
-- Return ONLY valid JSON
-- No explanation
-- Keep content unchanged
-
-Input:
-{raw_output}""")
     return ChatPromptTemplate.from_messages([system_msg, human_msg])
 
 
@@ -190,14 +158,9 @@ Criteria for is_valid=true:
 4. Fluency is natural for the target audience.
 
 Output:
-Return ONLY a valid JSON object. DO NOT include any explanation or extra text.
-
-JSON Schema:
-{{
-  "is_valid": boolean,
-  "error_type": "meaning|fluency|structure|placeholder|none",
-  "reason": "short explanation in English"
-}}""")
+- is_valid: true only if every criterion above is met
+- error_type: the main problem found, or none when the translation is valid
+- reason: short explanation in English""")
     return ChatPromptTemplate.from_messages([system_msg, human_msg])
 
 
@@ -227,10 +190,21 @@ Instructions:
 - Fix grammatical errors, fluency issues, or placeholder corruption.
 - If the source text is a stringified JSON array (e.g. `["a", "b"]`), the corrected translation MUST also be a stringified JSON array.
 - DO NOT translate the source back to English.
-- DO NOT provide any explanation, commentary, or introduction.
-- Return ONLY the corrected translation in {target_language}.
+- Put only the corrected translation in {target_language} in the corrected_translation field, with no explanation or commentary.""")
+    return ChatPromptTemplate.from_messages([system_msg, human_msg])
 
-Corrected Translation:""")
+
+def get_complexity_rating_prompt() -> ChatPromptTemplate:
+    system_msg = SystemMessagePromptTemplate.from_template("You are a translation complexity assessor.")
+    human_msg = HumanMessagePromptTemplate.from_template("""Task:
+Rate the translation complexity of the text from 0 to 100, where 100 is highly complex.
+
+Consider idioms, ambiguity, domain jargon, placeholders or markup, and sentence structure.
+
+Text:
+\"\"\"
+{text}
+\"\"\"""")
     return ChatPromptTemplate.from_messages([system_msg, human_msg])
 
 

@@ -7,73 +7,19 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.machine_translation import nllb_service
-from app.db.session import init_db
+from app.core.readiness import readiness
 
 
 from app.core.docs import API_TITLE, API_VERSION, API_DESCRIPTION, OPENAPI_TAGS
-health_status = {
-    "db": "pending",
-    "duckling": "pending",
-    "models": "pending",
-    "llm": "pending"
-}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
-    import httpx
-    from sqlalchemy import text
-    from app.db.session import engine
-    from app.llms.model import get_llm
-    
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(text("SELECT 1"))
-        await init_db()
-        health_status["db"] = "ok"
-    except Exception as e:
-        health_status["db"] = "error"
-        raise RuntimeError(f"DB Startup Check Failed: {e}")
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(settings.DUCKLING_URL, data={"text": "hello", "locale": "en_XX"})
-            resp.raise_for_status()
-        health_status["duckling"] = "ok"
-    except Exception as e:
-        health_status["duckling"] = "error"
-        raise RuntimeError(f"Duckling Startup Check Failed: {e}")
-
-    try:
-        llm = get_llm()
-        await llm.ainvoke("ping")
-        health_status["llm"] = "ok"
-    except Exception as e:
-        health_status["llm"] = "error"
-        raise RuntimeError(f"LLM Startup Check Failed: {e}")
-
-    try:
-        await asyncio.to_thread(nllb_service.preload_models)
-        
-        from app.pipeline.embeddings import get_embedding_model
-        await asyncio.to_thread(get_embedding_model)
-        
-        from app.pipeline.quality import _get_model
-        await asyncio.to_thread(_get_model)
-        
-        import nltk
-        try:
-            await asyncio.to_thread(nltk.data.find, 'tokenizers/punkt')
-        except LookupError:
-            await asyncio.to_thread(nltk.download, 'punkt', quiet=True)
-            
-        health_status["models"] = "ok"
-    except Exception as e:
-        health_status["models"] = "error"
-        raise RuntimeError(f"Models Preloading Failed: {e}")
-
+    # The server starts serving immediately; translation routes stay gated
+    # until the readiness monitor reports every dependency as OK.
+    readiness.start()
     yield
+    await readiness.stop()
 
 app = FastAPI(
     title=API_TITLE,
@@ -83,6 +29,7 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
+    redirect_slashes=False,
 )
 
 
@@ -91,16 +38,29 @@ app = FastAPI(
 @app.get(
     "/health",
     tags=["health"],
-    summary="Health check",
-    description="Returns service status including DB, Duckling, LLM, and Models.",
+    summary="Readiness check",
+    description=(
+        "Returns 200 only when every dependency is ready (DB, Duckling, LLM, and all models), "
+        "otherwise 503 with the status of each component. Translation routes are gated on the same state."
+    ),
     operation_id="health_check",
 )
 async def health():
-    """Health endpoint tracking connection states."""
-    is_healthy = all(v == "ok" for v in health_status.values())
-    if not is_healthy:
-        return JSONResponse(status_code=503, content={"status": "error", "components": health_status})
-    return {"status": "healthy", "components": health_status}
+    snapshot = readiness.snapshot()
+    if not snapshot["ready"]:
+        return JSONResponse(status_code=503, content={"status": "not_ready", **snapshot})
+    return {"status": "ready", **snapshot}
+
+
+@app.get(
+    "/health/live",
+    tags=["health"],
+    summary="Liveness check",
+    description="Returns 200 whenever the process is up and serving, regardless of dependency state.",
+    operation_id="liveness_check",
+)
+async def liveness():
+    return {"status": "alive"}
 
 
 
@@ -130,7 +90,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "success": False,
             "data": None,
             "error": exc.detail
-        }
+        },
+        headers=getattr(exc, "headers", None),
     )
 
 @app.exception_handler(Exception)

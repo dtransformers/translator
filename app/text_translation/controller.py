@@ -1,4 +1,3 @@
-from bokeh.core.property.any import Any
 import time
 import logging
 import re
@@ -13,16 +12,15 @@ from app.pipeline import (
     is_in_supported_languages,
     calculate_complexity_score,
     translate,
+    routes_to_llm,
     score_translation,
 )
-from app.text_translation.schemas import TranslationRequest, DetectionRequest
+from app.text_translation.schemas import TranslationRequest, DetectionRequest, TranslationSource
 from app.llms import retrieve_rag_examples
 from app.core.config import settings
 from app.pipeline.reviewer import review_translations_batch
 
 logger = logging.getLogger(__name__)
-
-trustedScore = 0.85
 
 class TextTranslationController:
     def __init__(self, db: AsyncSession):
@@ -136,12 +134,17 @@ class TextTranslationController:
         if not is_in_supported_languages(source_lang, target_lang):
             return {"error": f"Language pair {source_lang}->{target_lang} is not supported"}
 
-        cached: Any = await self.translation_svc.find_cached(text, source_lang, target_lang)
-        if cached and cached.trust_score is not None and float(cached.trust_score) >= trustedScore:
-            complexity_score = await calculate_complexity_score(text)
+        cache_hit = await self.translation_svc.find_cached(text, source_lang, target_lang)
+        cached, cache_source = cache_hit if cache_hit else (None, None)
+        if cached and cached.trust_score is not None and float(cached.trust_score) >= settings.TRUST_SCORE_THRESHOLD:
+            complexity_score = cached.complexity_score
+            if complexity_score is None:
+                brand_context, domain_rules = await self._compile_context(brand_uuid, domain_name, text, target_lang)
+                complexity_score = await calculate_complexity_score(text, brand_context, domain_rules)
             return {
                 "message": "Translation retrieved from cache",
                 "translation": cached.translation,
+                "source": cache_source,
                 "cached": True,
                 "score": cached.score,
                 "complexity_score": complexity_score,
@@ -153,7 +156,7 @@ class TextTranslationController:
         complexity_score = await calculate_complexity_score(text, brand_context, domain_rules)
 
         similar_examples = []
-        if complexity_score >= settings.COMPLEXITY_THRESHOLD:
+        if routes_to_llm(text, complexity_score, brand_context):
             similar_examples = await retrieve_rag_examples(
                 translation_svc=self.translation_svc,
                 text=text,
@@ -196,6 +199,8 @@ class TextTranslationController:
             detected_output_lang=target_lang,
             is_successed=is_successed,
             score=comet_score,
+            trust_score=comet_score,
+            complexity_score=complexity_score,
             notes=notes,
             translation_time=translation_time_elapsed,
             input_size=len(text),
@@ -209,9 +214,17 @@ class TextTranslationController:
             property=property_name,
         )
 
+        if not is_successed:
+            return {"error": f"Translation failed: {notes}", "status_code": 502}
+
         return {
-            "message": "Translation completed" if is_successed else f"Translation failed: {notes}",
+            "message": "Translation completed",
             "translation": translation_text,
+            "source": (
+                TranslationSource.LLM
+                if routes_to_llm(text, complexity_score, brand_context)
+                else TranslationSource.MACHINE_TRANSLATION
+            ),
             "score": comet_score,
             "complexity_score": complexity_score,
             "detected_input_lang": detected_input_lang,

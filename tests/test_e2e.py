@@ -121,15 +121,14 @@ def test_cli_translate_missing_input(tmp_path):
 @pytest.mark.asyncio
 async def test_endpoint_health(client: AsyncClient, mocker):
     """Test health check route."""
-    mocker.patch(
-        "app.main.health_status",
-        {"db": "ok", "duckling": "ok", "models": "ok", "llm": "ok"}
-    )
-    
+    from app.core.readiness import CheckStatus, readiness
+    mocker.patch.dict(readiness.checks, {name: CheckStatus(ok=True, error=None) for name in readiness.checks})
+
     response = await client.get("/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "healthy"
+    assert data["status"] == "ready"
+    assert data["ready"] is True
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,7 @@ from typing import Any
 import asyncio
 from app.machine_translation import nllb_service
 from app.llms.model import get_llm
+from app.llms.schemas import TranslationResult, translation_batch_schema
 from app.llms.prompts import get_translation_draft_prompt
 from app.core.config import settings
 
@@ -25,7 +26,7 @@ async def translate_with_llm(
     ctx = brand_context or {}
     llm = get_llm()
     prompt = get_translation_draft_prompt()
-    chain = prompt | llm
+    chain = prompt | llm.with_structured_output(TranslationResult, method="json_schema")
 
     if similar_examples:
         rag_str = "\n".join(
@@ -43,21 +44,28 @@ async def translate_with_llm(
         "glossary": json.dumps(ctx.get("glossary", {})),
         "domain_rules": json.dumps(domain_rules or {}),
         "rag_examples": rag_str,
-        "texts": json.dumps([text]),
+        "texts": text,
+        "output_instructions": "Return the translated text in the translation field.",
     })
 
-    raw_content = response.content
-    content = str(raw_content) if not isinstance(raw_content, list) else " ".join(map(str, raw_content))
+    return response.translation
 
-    try:
-        content_clean = content.replace("```json", "").replace("```", "").strip()
-        translated_list = json.loads(content_clean)
-        if isinstance(translated_list, list) and len(translated_list) > 0:
-            return str(translated_list[0])
-        return content
-    except Exception as e:
-        logger.exception("Failed to parse LLM response: %s", e)
-        return content
+
+def routes_to_llm(
+    text: str,
+    complexity_score: int,
+    brand_context: dict[str, Any] | None = None,
+) -> bool:
+    """True when the text needs the LLM: brand glossary/keyword match or complexity >= threshold."""
+    if brand_context:
+        text_lower = text.lower()
+        glossary = brand_context.get("glossary", {})
+        if any(term.lower() in text_lower for term in glossary.keys()):
+            return True
+        keywords = brand_context.get("keywords", [])
+        if any(kw.lower() in text_lower for kw in keywords):
+            return True
+    return complexity_score >= settings.COMPLEXITY_THRESHOLD
 
 
 async def translate(
@@ -81,29 +89,12 @@ async def translate(
         domain_rules: Optional domain rules.
         similar_examples: Optional similar examples for RAG.
     """
-  
-    
-    requires_llm = False
-    text_lower = text.lower()
-    
-    if brand_context:
-        glossary = brand_context.get("glossary", {})
-        if any(term.lower() in text_lower for term in glossary.keys()):
-            requires_llm = True
-            
-        keywords = brand_context.get("keywords", [])
-        if any(kw.lower() in text_lower for kw in keywords):
-            requires_llm = True
-
-    if not requires_llm and complexity_score >= settings.COMPLEXITY_THRESHOLD:
-        requires_llm = True
-
-    if requires_llm:
+    if routes_to_llm(text, complexity_score, brand_context):
         logger.info(
             "Routing to LLM (complexity=%d/%d, brand_context_match=%s).",
             complexity_score,
             settings.COMPLEXITY_THRESHOLD,
-            requires_llm and complexity_score < settings.COMPLEXITY_THRESHOLD
+            complexity_score < settings.COMPLEXITY_THRESHOLD
         )
         return await translate_with_llm(
             text, source_lang, target_lang, brand_context, domain_rules, similar_examples
@@ -124,6 +115,7 @@ async def translate_json_with_llm(
     target_lang: str,
     brand_context: dict[str, Any] | None = None,
     domain_rules: dict[str, Any] | None = None,
+    similar_examples: list[dict] | None = None,
 ) -> dict[str, str]:
     """Translates a dictionary of flattened/pruned json nodes returning a dict with identical keys."""
     if not pruned_json:
@@ -132,28 +124,20 @@ async def translate_json_with_llm(
     ctx = brand_context or {}
     llm = get_llm()
     prompt = get_translation_draft_prompt()
-    chain = prompt | llm
+    schema = translation_batch_schema(pruned_json)
+    chain = prompt | llm.with_structured_output(schema, method="json_schema")
 
     # Dump the pruned json into the prompt
     response = await chain.ainvoke({
         "source_language": source_lang,
         "target_language": target_lang,
         "industry": ctx.get("industry", "General"),
-        "summary": ctx.get("summary", "Translate this JSON object values. Return ONLY valid JSON with identical keys."),
+        "summary": ctx.get("summary", "General text"),
         "glossary": json.dumps(ctx.get("glossary", {})),
         "domain_rules": json.dumps(domain_rules or {}),
-        "rag_examples": "None",
+        "rag_examples": json.dumps(similar_examples, ensure_ascii=False) if similar_examples else "None",
         "texts": json.dumps(pruned_json, ensure_ascii=False),
+        "output_instructions": "Translate the object values, preserving every input key exactly.",
     })
 
-    raw_content = response.content
-    content = str(raw_content) if not isinstance(raw_content, list) else " ".join(map(str, raw_content))
-    
-    # Strip markdown codeblocks
-    content_clean = content.replace("```json", "").replace("```", "").strip()
-    try:
-        translated_dict = json.loads(content_clean)
-        return translated_dict
-    except json.JSONDecodeError:
-        logger.exception("Failed to parse LLM JSON batch response.")
-        return {}
+    return response.model_dump(by_alias=True)

@@ -86,6 +86,22 @@ ERROR_500: dict = {
     }
 }
 
+ERROR_502: dict = {
+    502: {
+        "model": ErrorResponse,
+        "description": "Bad Gateway — the translation engine (NLLB or LLM) failed",
+        "content": {
+            "application/json": {
+                "example": {
+                    "success": False,
+                    "data": None,
+                    "error": "Translation failed: LLM request timed out",
+                }
+            }
+        },
+    }
+}
+
 # Combined set for convenience
 COMMON_ERRORS = {**ERROR_400, **ERROR_422, **ERROR_500}
 CRUD_ERRORS = {**ERROR_404, **ERROR_422, **ERROR_500}
