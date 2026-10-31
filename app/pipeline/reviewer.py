@@ -6,7 +6,7 @@ and corrects them using the LLM.
 
 import asyncio
 import logging
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
 
