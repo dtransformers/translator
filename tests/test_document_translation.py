@@ -253,7 +253,12 @@ async def test_translate_text_controller_cache_hit_fields(mocker):
 
 
 @pytest.mark.asyncio
-async def test_translate_text_controller_llm_rag_lookup(mocker):
+@pytest.mark.parametrize("complexity,brand_context", [
+    (60, {}),
+    (10, {"keywords": ["Hello"]}),
+    (10, {"glossary": {"world": "mundo"}}),
+])
+async def test_translate_text_controller_llm_rag_lookup(mocker, complexity, brand_context):
     from app.text_translation.models import Translation
     from app.text_translation.schemas import TranslationRequest
     from app.text_translation.controller import TextTranslationController
@@ -279,7 +284,7 @@ async def test_translate_text_controller_llm_rag_lookup(mocker):
     # 3. Mock other services
     mocker.patch(
         "app.text_translation.controller.BrandService.get_brand_context",
-        return_value={}
+        return_value=brand_context
     )
     mocker.patch(
         "app.text_translation.controller.ReusableUnitService.build_glossary_from_units",
@@ -303,7 +308,7 @@ async def test_translate_text_controller_llm_rag_lookup(mocker):
     # Ensure complexity triggers LLM (>= 50)
     mocker.patch(
         "app.text_translation.controller.calculate_complexity_score",
-        return_value=60
+        return_value=complexity
     )
 
     payload = TranslationRequest(
@@ -345,3 +350,37 @@ async def test_retrieve_rag_examples(mocker):
     assert len(result) == 1
     assert result[0]["source"] == "Welcome"
     assert result[0]["translation"] == "Bienvenido"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retrieval_fails", [False, True])
+async def test_document_llm_batch_includes_semantic_examples(mocker, retrieval_fails):
+    from unittest.mock import MagicMock
+    from langchain_core.runnables import RunnableLambda
+    from app.llms.schemas import translation_batch_schema
+    from app.text_translation.models import Translation
+
+    ctl = DocumentTranslationController(AsyncMock())
+    nodes = [TextNode("Hello world", "title")]
+    # Keep retrieval formatting, batch orchestration and prompt rendering real.
+    lookup = mocker.patch.object(
+        ctl.text_ctl.translation_svc, "retrieve_similar_translations",
+        side_effect=RuntimeError("search unavailable") if retrieval_fails else None,
+        return_value=[Translation(value="Welcome friend", translation="Bienvenue ami")],
+    )
+    sent = []
+    schema = translation_batch_schema({"title": "Hello world"})
+    def respond(prompt):
+        sent.append(prompt.to_string())
+        return schema.model_validate({"title": "Bonjour monde"})
+    llm = MagicMock()
+    llm.with_structured_output.return_value = RunnableLambda(respond)
+    mocker.patch("app.pipeline.translation.get_llm", return_value=llm)
+
+    await ctl._process_llm_batch({"title": "Hello world"}, nodes, "en", "fr", {})
+
+    assert nodes[0].translated_value == "Bonjour monde"
+    lookup.assert_awaited_once_with(text="Hello world", source_lang="en", target_lang="fr", limit=3)
+    if not retrieval_fails:
+        assert "Welcome friend" in sent[0]
+        assert "Bienvenue ami" in sent[0]

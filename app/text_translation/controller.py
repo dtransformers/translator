@@ -156,7 +156,7 @@ class TextTranslationController:
         complexity_score = await calculate_complexity_score(text, brand_context, domain_rules)
 
         similar_examples = []
-        if complexity_score >= settings.COMPLEXITY_THRESHOLD:
+        if routes_to_llm(text, complexity_score, brand_context):
             similar_examples = await retrieve_rag_examples(
                 translation_svc=self.translation_svc,
                 text=text,

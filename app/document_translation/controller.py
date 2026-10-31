@@ -14,6 +14,7 @@ from app.pipeline import (
     DocumentNode,
     is_ast_compatible,
 )
+from app.llms import retrieve_rag_examples
 from app.pipeline.translation import translate_json_with_llm
 from app.pipeline.complexity import calculate_complexity_score
 from app.core.config import settings
@@ -78,8 +79,26 @@ class DocumentTranslationController:
             return
             
         try:
+            similar_examples = []
+            seen_examples = set()
+            # Retrieve per distinct segment so unrelated fields do not dilute the query.
+            # Keep queries sequential because they share an AsyncSession.
+            for text in dict.fromkeys(llm_batch.values()):
+                examples = await retrieve_rag_examples(
+                    translation_svc=self.text_ctl.translation_svc,
+                    text=text,
+                    source_lang=source_lang,
+                    target_lang=target_lang,
+                    limit=3,
+                )
+                for example in examples:
+                    key = (example["source"], example["translation"])
+                    if key not in seen_examples:
+                        seen_examples.add(key)
+                        similar_examples.append(example)
             translated_batch = await translate_json_with_llm(
-                llm_batch, source_lang, target_lang, brand_context=brand_context
+                llm_batch, source_lang, target_lang, brand_context=brand_context,
+                similar_examples=similar_examples,
             )
             for node in translatable_nodes:
                 if node.path in translated_batch:

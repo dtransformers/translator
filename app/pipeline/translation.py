@@ -115,6 +115,7 @@ async def translate_json_with_llm(
     target_lang: str,
     brand_context: dict[str, Any] | None = None,
     domain_rules: dict[str, Any] | None = None,
+    similar_examples: list[dict] | None = None,
 ) -> dict[str, str]:
     """Translates a dictionary of flattened/pruned json nodes returning a dict with identical keys."""
     if not pruned_json:
@@ -134,7 +135,7 @@ async def translate_json_with_llm(
         "summary": ctx.get("summary", "General text"),
         "glossary": json.dumps(ctx.get("glossary", {})),
         "domain_rules": json.dumps(domain_rules or {}),
-        "rag_examples": "None",
+        "rag_examples": json.dumps(similar_examples, ensure_ascii=False) if similar_examples else "None",
         "texts": json.dumps(pruned_json, ensure_ascii=False),
         "output_instructions": "Translate the object values, preserving every input key exactly.",
     })
