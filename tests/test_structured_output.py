@@ -180,3 +180,26 @@ class PromptSchemaTests(unittest.TestCase):
                 patch('app.core.config.settings.COMPLEXITY_THRESHOLD', 50):
             score = asyncio.run(complexity._get_llm_fallback_score('Hello', 50))
         self.assertEqual((score, bound['schema'], bound['method']), (65, ComplexityRating, 'json_schema'))
+
+
+class SingleTextLlmInputTests(unittest.TestCase):
+    def test_single_text_is_sent_as_plain_text_not_a_json_array(self):
+        # The draft prompt keeps JSON-array-looking texts as arrays, so wrapping a plain
+        # sentence in [...] made the model return '["..."]' as the translation.
+        import asyncio
+        from unittest.mock import MagicMock, patch
+        from langchain_core.runnables import RunnableLambda
+        from app.llms.schemas import TranslationResult
+        from app.pipeline import translation
+
+        sent = {}
+        llm = MagicMock()
+        llm.with_structured_output.return_value = RunnableLambda(
+            lambda prompt_value: sent.setdefault('prompt', prompt_value.to_string()) and TranslationResult(translation='Bonjour')
+        )
+        with patch('app.pipeline.translation.get_llm', return_value=llm):
+            result = asyncio.run(translation.translate_with_llm('Hello there', 'en', 'fr'))
+
+        self.assertEqual(result, 'Bonjour')
+        self.assertIn('Texts:\nHello there', sent['prompt'])
+        self.assertNotIn('["Hello there"]', sent['prompt'])

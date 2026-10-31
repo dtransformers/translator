@@ -24,7 +24,10 @@ class Settings(BaseSettings):
     API_USERNAME: str
     API_PASSWORD: str 
 
-    COMPLEXITY_THRESHOLD: int = 50
+    # Calibrated on the rebuilt score: simple UI/marketing copy lands at 9-25, dense legal/jargon at 29-45
+    COMPLEXITY_THRESHOLD: int = 28
+    # Scores within this distance of the threshold are averaged with an LLM complexity rating
+    COMPLEXITY_LLM_WINDOW: int = 8
     TRUST_SCORE_THRESHOLD: float = 0.85
     SEMANTIC_CACHE_MAX_DISTANCE: float = 0.02
 

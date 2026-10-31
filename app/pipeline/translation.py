@@ -44,7 +44,7 @@ async def translate_with_llm(
         "glossary": json.dumps(ctx.get("glossary", {})),
         "domain_rules": json.dumps(domain_rules or {}),
         "rag_examples": rag_str,
-        "texts": json.dumps([text]),
+        "texts": text,
         "output_instructions": "Return the translated text in the translation field.",
     })
 

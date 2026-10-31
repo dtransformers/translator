@@ -14,6 +14,7 @@ from app.text_translation.models import Translation
 from app.pipeline.complexity import calculate_complexity_score
 from app.pipeline.quality import score_translation
 from app.llms.model import get_llm
+from app.core.config import settings
 from app.llms.prompts import get_fix_translation_prompt
 from app.llms.schemas import FixedTranslation
 
@@ -52,7 +53,7 @@ async def _process_translation(db: AsyncSession, t: Any) -> tuple[bool, bool]:
             t.trust_score = await asyncio.to_thread(score_translation, t.value, t.translation)
         needs_update = True
         
-    if t.trust_score is not None and t.trust_score <= 0.85 and t.complexity_score >= 35:
+    if t.trust_score is not None and t.trust_score <= 0.85 and t.complexity_score >= settings.COMPLEXITY_THRESHOLD:
         logger.info(f"Reviewing translation ID {t.id} (Trust: {t.trust_score}, Complexity: {t.complexity_score})")
         reviewed = True
         

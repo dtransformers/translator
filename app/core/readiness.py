@@ -143,17 +143,12 @@ class Readiness:
     async def _load_complexity_models(self) -> None:
         from app.pipeline import complexity
 
-        if complexity._readability_pipe is None or complexity._lcp_pipe is None:
+        if complexity._readability_pipe is None:
             # _load_models logs and swallows its own failures, so allow a retry and inspect the result
             complexity._models_loaded = False
             await asyncio.to_thread(complexity._load_models)
-        missing = [
-            name
-            for name, pipe in (("readability", complexity._readability_pipe), ("lcp", complexity._lcp_pipe))
-            if pipe is None
-        ]
-        if missing:
-            raise RuntimeError(f"failed to load: {', '.join(missing)} (see logs)")
+        if complexity._readability_pipe is None:
+            raise RuntimeError("failed to load readability model (see logs)")
 
     async def _load_nltk_punkt(self) -> None:
         import nltk
