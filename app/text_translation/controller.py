@@ -22,6 +22,33 @@ from app.pipeline.reviewer import review_translations_batch
 
 logger = logging.getLogger(__name__)
 
+BRAND_PLACEHOLDER = "{{BRAND_NAME}}"
+# Models sometimes reformat the token: extra spaces, lowercase, single braces.
+_BRAND_PLACEHOLDER_RE = re.compile(r"\{\{?\s*brand_name\s*\}\}?", re.IGNORECASE)
+# Anything still resembling the token after restoration means it was mangled.
+_BRAND_PLACEHOLDER_RESIDUE_RE = re.compile(r"brand[\s_]*name", re.IGNORECASE)
+
+
+def mask_brand(text: str, brand_name: str) -> str:
+    """Replace whole-word, case-insensitive brand mentions with the placeholder."""
+    pattern = re.compile(rf"\b{re.escape(brand_name)}\b", re.IGNORECASE)
+    return pattern.sub(BRAND_PLACEHOLDER, text)
+
+
+def restore_brand(translation: str, brand_name: str) -> str | None:
+    """
+    Put the brand name back into a translation.
+
+    Returns None if a placeholder is still present in a form we can't safely
+    restore, so the caller can treat the translation as failed instead of
+    returning corrupted text.
+    """
+    restored = _BRAND_PLACEHOLDER_RE.sub(lambda _: brand_name, translation)
+    if _BRAND_PLACEHOLDER_RESIDUE_RE.search(restored):
+        return None
+    return restored
+
+
 class TextTranslationController:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -58,11 +85,12 @@ class TextTranslationController:
         similar_examples: list,
     ) -> tuple[str | None, bool, str | None]:
         brand_name = brand_context.get("name") if brand_context else None
-        placeholder = "{{BRAND_NAME}}"
-        
+        masked = False
+
         if brand_name:
-            pattern = re.compile(rf"\b{re.escape(brand_name)}\b", re.IGNORECASE)
-            text = pattern.sub(placeholder, text)
+            masked_text = mask_brand(text, brand_name)
+            masked = masked_text != text
+            text = masked_text
 
         try:
             translation_text = await translate(
@@ -74,8 +102,15 @@ class TextTranslationController:
                 domain_rules,
                 similar_examples=similar_examples,
             )
-            if brand_name and translation_text:
-                translation_text = translation_text.replace(placeholder, brand_name)
+            if masked and translation_text:
+                restored = restore_brand(translation_text, brand_name)
+                if restored is None:
+                    logger.warning(
+                        "Brand placeholder could not be restored in translation: %r",
+                        translation_text[:80],
+                    )
+                    return None, False, "Brand placeholder was altered by the translation engine"
+                translation_text = restored
             return translation_text, True, None
         except NotImplementedError as e:
             raise e
