@@ -55,3 +55,61 @@ async def test_get_brand_not_found(client: AsyncClient, mocker):
     data = response.json()
     assert data["success"] is False
     assert data["error"] == "Brand not found"
+
+
+# --------------------------------------------------------------------------- #
+#  BrandService.get_brand_context (issue #12)
+# --------------------------------------------------------------------------- #
+
+from unittest.mock import MagicMock
+
+from app.brands.service import BrandService
+
+
+def _db_returning(brand):
+    """Fake AsyncSession whose execute() yields `brand` from scalars().first()."""
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = brand
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=result)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_get_brand_context_with_existing_brand():
+    brand = Brand(
+        uuid="brand-1", name="Acme", industry="Retail", tone="Playful",
+        audience=None, keywords=["deals"], entities=[], summary=None,
+    )
+    svc = BrandService(_db_returning(brand))
+
+    context = await svc.get_brand_context("brand-1")
+
+    assert context["name"] == "Acme"
+    assert context["industry"] == "Retail"
+    assert context["tone"] == "Playful"
+    assert context["keywords"] == ["deals"]
+    # Missing fields fall back to defaults
+    assert context["audience"] == "General audience, globally"
+    assert context["summary"] == "General translation of user provided text."
+
+
+@pytest.mark.asyncio
+async def test_get_brand_context_with_unknown_brand_returns_defaults():
+    svc = BrandService(_db_returning(None))
+
+    context = await svc.get_brand_context("missing")
+
+    assert "name" not in context
+    assert context["industry"] == "General Technology"
+
+
+@pytest.mark.asyncio
+async def test_get_brand_context_without_uuid_skips_db():
+    db = _db_returning(None)
+    svc = BrandService(db)
+
+    context = await svc.get_brand_context(None)
+
+    db.execute.assert_not_called()
+    assert context["tone"] == "Professional, clear, and objective"
