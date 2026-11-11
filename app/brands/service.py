@@ -98,7 +98,7 @@ class BrandService:
         }
 
         if brand_uuid:
-            brand = await self._repo.get_by_uuid(brand_uuid)
+            brand = await self.get_by_uuid(brand_uuid)
             if brand:
                 context.update({
                     "name": brand.name,
